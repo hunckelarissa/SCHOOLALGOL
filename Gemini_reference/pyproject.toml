@@ -1,0 +1,24 @@
+[project]
+name = "gemini-alg"
+version = "1.1.0"
+description = "Интерпретатор и C-транспилятор языка .alg"
+requires-python = ">=3.7"
+
+[project.scripts]
+gemini-alg = "main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+markers = [
+    "slow: стресс-тесты (пропуск: pytest -m 'not slow')",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [".pytest_cache/*", "tests/programs/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

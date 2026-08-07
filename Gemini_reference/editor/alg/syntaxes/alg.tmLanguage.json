@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "alg",
+  "scopeName": "source.alg",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.bar.alg",
+      "match": "\\|.*$"
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.alg",
+          "match": "(?i)\\b(алг|нач|кон|если|то|иначе|все|нц|кц|для|пока|от|до|ввод|вывод|использовать|proc|begin|end|if|then|else|endif|loop|eloop|for|while|from|to|input|output|import)\\b"
+        },
+        {
+          "name": "storage.type.alg",
+          "match": "(?i)\\b(цел|вещ|лит|лог|таб|файл|словарь|запись|переч|конст|арг|рез|int|real|str|bool|tab|file|dict|rec|enum|const|arg|res)\\b"
+        },
+        {
+          "name": "keyword.operator.word.alg",
+          "match": "(?i)\\b(и|или|не|да|нет|and|or|not|true|false)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "name": "variable.language.builtin.alg",
+      "match": "(?i)\\b(открыть|закрыть|конецфайла|корень|модуль|случ|случцел|длина|подстрока|вверх|вниз|вцел|ввещ|встроку|open|close|eof|sqrt|abs|rand|randint|len|substr|upper|lower|toint|toreal|tostr)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.alg",
+      "match": "\\b\\d+(?:\\.\\d+)?\\b"
+    },
+    "operators": {
+      "name": "keyword.operator.alg",
+      "match": ":=|<>|>=|<=|[^\\w\\s|\"]"
+    },
+    "strings": {
+      "name": "string.quoted.double.alg",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.alg",
+          "match": "\\\\[nrt\"\\\\]"
+        }
+      ]
+    }
+  }
+}

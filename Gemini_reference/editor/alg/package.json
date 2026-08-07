@@ -1,0 +1,26 @@
+{
+  "name": "alg-language",
+  "displayName": "Gemini .alg Language",
+  "description": "Подсветка синтаксиса языка .alg (Gemini)",
+  "version": "1.0.0",
+  "publisher": "gemini-local",
+  "engines": { "vscode": "^1.70.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "alg",
+        "aliases": ["alg", ".alg", "Gemini alg"],
+        "extensions": [".alg"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "alg",
+        "scopeName": "source.alg",
+        "path": "./syntaxes/alg.tmLanguage.json"
+      }
+    ]
+  }
+}

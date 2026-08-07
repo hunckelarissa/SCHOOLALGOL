@@ -1,0 +1,766 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <!--
+      Extension -> engine law (single engine):
+        .alg -> schoolalgol (SCHOOLALGOL / ALG)
+      See org.myau.shaya.ide.toolchain.ShayaToolchain#engineIdFor(File).
+   -->
+
+   <extension point="org.eclipse.core.contenttype.contentTypes">
+      <content-type
+            id="org.myau.shaya.ide.contenttype.alg"
+            name="ALG Source (.alg / SCHOOLALGOL)"
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="alg"
+            priority="high"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.editors">
+      <editor
+            id="org.myau.shaya.ide.editor.alg"
+            name="ALG Editor (.alg)"
+            extensions="alg"
+            icon="icons/alg.png"
+            class="org.myau.shaya.ide.editor.ShayaEditor"
+            contributorClass="org.eclipse.ui.editors.text.TextEditorActionContributor"
+            default="true">
+         <contentTypeBinding contentTypeId="org.myau.shaya.ide.contenttype.alg"/>
+      </editor>
+   </extension>
+
+   <!-- Force editor binding after workbench start (overrides cached Default Text Editor) -->
+   <extension point="org.eclipse.ui.startup">
+      <startup class="org.myau.shaya.ide.ShayaStartup"/>
+   </extension>
+
+   <!-- Commands -->
+   <extension point="org.eclipse.ui.commands">
+      <category
+            id="org.myau.shaya.ide.category"
+            name="ALG"
+            description="ALG IDE — SCHOOLALGOL (.alg) toolchain"/>
+      <command
+            id="org.myau.shaya.ide.commands.run"
+            name="Run"
+            description="Run current .alg source with SCHOOLALGOL"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.check"
+            name="Check"
+            description="Syntax-check current .alg (lex + parse, no execute)"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.runLast"
+            name="Run Last"
+            description="Repeat the last ALG Run / Check"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.about"
+            name="About ALG…"
+            description="About ALG IDE / SCHOOLALGOL"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.toggleComment"
+            name="Toggle Comment"
+            description="Toggle | line comments"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.gotoMatching"
+            name="Go to Matching Block"
+            description="Jump between нач/если/нц… and кон/все/кц…"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.debug"
+            name="Debug (CLI)"
+            description="CLI Debug — not available for SCHOOLALGOL; use Run"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.stepDebug"
+            name="Step Debug"
+            description="Eclipse step-debug (SHAYDBG / --debug-protocol)"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.newHello"
+            name="New Hello…"
+            description="Create a Hello .alg sample"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.toggleNature"
+            name="Add/Remove ALG Nature"
+            description="Add or remove ALG project nature and check builder"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.openTrack"
+            name="Учебный трек…"
+            description="Open examples/track/README.md"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.shortcuts"
+            name="Keyboard Shortcuts…"
+            description="Show ALG hotkey cheat sheet"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.refresh"
+            name="Refresh Project"
+            description="Refresh project / workspace so disk files appear in Explorer"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.openMap"
+            name="EXTENSION_MAP…"
+            description="Open docs/EXTENSION_MAP.md"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.importTrack"
+            name="Import Track as Project"
+            description="Import examples/track as linked project shaya-track"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.welcome"
+            name="Welcome…"
+            description="First steps: perspective, track, map, new project"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.duplicateLine"
+            name="Duplicate Lines"
+            description="Duplicate the current line or selection"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.moveLineUp"
+            name="Move Lines Up"
+            description="Move selected lines up"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.moveLineDown"
+            name="Move Lines Down"
+            description="Move selected lines down"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.joinLines"
+            name="Join Lines"
+            description="Join selected lines (or current + next) with a space"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.sortLines"
+            name="Sort Lines"
+            description="Sort selected lines alphabetically"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.expandSelection"
+            name="Expand Selection to Block"
+            description="Select enclosing нач…кон / если…все / нц…кц"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.quickOutline"
+            name="Quick Outline"
+            description="Jump to алг / нач in the current file"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.findReferences"
+            name="Find References"
+            description="Find identifier references in file or project"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.rename"
+            name="Rename…"
+            description="Rename identifier in file or project"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.reindent"
+            name="Reindent"
+            description="Reindent by нач/если/нц… ↔ кон/все/кц nesting"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
+            id="org.myau.shaya.ide.commands.gotoDeclaration"
+            name="Go to Declaration"
+            description="Jump to алг declaration"
+            categoryId="org.myau.shaya.ide.category"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.handlers">
+      <handler
+            commandId="org.myau.shaya.ide.commands.run"
+            class="org.myau.shaya.ide.run.ShayaRunHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.check"
+            class="org.myau.shaya.ide.run.ShayaCheckHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.runLast"
+            class="org.myau.shaya.ide.run.ShayaRunLastHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.about"
+            class="org.myau.shaya.ide.ui.ShayaAboutHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.toggleComment"
+            class="org.myau.shaya.ide.editor.ShayaToggleCommentHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.gotoMatching"
+            class="org.myau.shaya.ide.editor.ShayaGotoMatchingHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.debug"
+            class="org.myau.shaya.ide.run.ShayaDebugHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.stepDebug"
+            class="org.myau.shaya.ide.run.ShayaStepDebugHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.newHello"
+            class="org.myau.shaya.ide.wizards.ShayaNewHelloHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.toggleNature"
+            class="org.myau.shaya.ide.run.ShayaToggleNatureHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.openTrack"
+            class="org.myau.shaya.ide.run.ShayaOpenTrackHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.shortcuts"
+            class="org.myau.shaya.ide.ui.ShayaShortcutsHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.refresh"
+            class="org.myau.shaya.ide.run.ShayaRefreshHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.openMap"
+            class="org.myau.shaya.ide.run.ShayaOpenMapHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.importTrack"
+            class="org.myau.shaya.ide.run.ShayaImportTrackHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.welcome"
+            class="org.myau.shaya.ide.ui.ShayaWelcomeHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.duplicateLine"
+            class="org.myau.shaya.ide.editor.ShayaLineEditHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.moveLineUp"
+            class="org.myau.shaya.ide.editor.ShayaLineEditHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.moveLineDown"
+            class="org.myau.shaya.ide.editor.ShayaLineEditHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.joinLines"
+            class="org.myau.shaya.ide.editor.ShayaLineEditHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.sortLines"
+            class="org.myau.shaya.ide.editor.ShayaLineEditHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.expandSelection"
+            class="org.myau.shaya.ide.editor.ShayaExpandSelectionHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.quickOutline"
+            class="org.myau.shaya.ide.editor.ShayaQuickOutlineHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.findReferences"
+            class="org.myau.shaya.ide.editor.ShayaFindReferencesHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.rename"
+            class="org.myau.shaya.ide.editor.ShayaRenameHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.reindent"
+            class="org.myau.shaya.ide.editor.ShayaReindentHandler"/>
+      <handler
+            commandId="org.myau.shaya.ide.commands.gotoDeclaration"
+            class="org.myau.shaya.ide.editor.ShayaGotoDeclarationHandler"/>
+   </extension>
+
+   <!-- Menu / toolbar -->
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
+         <menu id="org.myau.shaya.ide.menu" label="ALG" mnemonic="A">
+            <menu id="org.myau.shaya.ide.menu.run" label="Run" mnemonic="R">
+               <command
+                     commandId="org.myau.shaya.ide.commands.run"
+                     label="Run"
+                     mnemonic="R"
+                     icon="icons/run.png"
+                     style="push"/>
+               <command
+                     commandId="org.myau.shaya.ide.commands.check"
+                     label="Check"
+                     mnemonic="C"
+                     icon="icons/check.png"
+                     style="push"/>
+               <command
+                     commandId="org.myau.shaya.ide.commands.runLast"
+                     label="Run Last"
+                     mnemonic="L"
+                     icon="icons/last.png"
+                     style="push"/>
+               <command
+                     commandId="org.myau.shaya.ide.commands.debug"
+                     label="Debug (CLI)"
+                     mnemonic="D"
+                     icon="icons/debug.png"
+                     style="push"/>
+               <command
+                     commandId="org.myau.shaya.ide.commands.stepDebug"
+                     label="Step Debug"
+                     mnemonic="S"
+                     icon="icons/step.png"
+                     style="push"/>
+               <menu id="org.myau.shaya.ide.menu.recent" label="Recent">
+                  <dynamic
+                        id="org.myau.shaya.ide.recent.dynamic"
+                        class="org.myau.shaya.ide.run.ShayaRecentContribution"/>
+               </menu>
+            </menu>
+            <menu id="org.myau.shaya.ide.menu.edit" label="Edit" mnemonic="E">
+               <command commandId="org.myau.shaya.ide.commands.toggleComment" label="Toggle Comment" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.reindent" label="Reindent" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.duplicateLine" label="Duplicate Lines" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.moveLineUp" label="Move Lines Up" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.moveLineDown" label="Move Lines Down" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.joinLines" label="Join Lines" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.sortLines" label="Sort Lines" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.expandSelection" label="Expand Selection to Block" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.rename" label="Rename…" style="push"/>
+            </menu>
+            <menu id="org.myau.shaya.ide.menu.navigate" label="Navigate" mnemonic="N">
+               <command commandId="org.myau.shaya.ide.commands.gotoMatching" label="Go to Matching Block" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.quickOutline" label="Quick Outline" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.gotoDeclaration" label="Go to Declaration" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.findReferences" label="Find References" style="push"/>
+            </menu>
+            <menu id="org.myau.shaya.ide.menu.project" label="Project / Docs" mnemonic="P">
+               <command commandId="org.myau.shaya.ide.commands.newHello" label="New Hello…" mnemonic="H" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.refresh" label="Refresh Project" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.toggleNature" label="Add/Remove ALG Nature" icon="icons/alg16.png" style="push"/>
+               <separator name="org.myau.shaya.ide.sep.docs" visible="true"/>
+               <command commandId="org.myau.shaya.ide.commands.openTrack" label="Учебный трек…" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.importTrack" label="Import Track as Project" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.openMap" label="EXTENSION_MAP…" style="push"/>
+            </menu>
+            <separator name="org.myau.shaya.ide.sep.help" visible="true"/>
+            <command commandId="org.myau.shaya.ide.commands.welcome" label="Welcome…" icon="icons/alg.png" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.shortcuts" label="Keyboard Shortcuts…" style="push"/>
+            <command commandId="org.eclipse.ui.window.preferences" label="Preferences…" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.about" label="About ALG…" mnemonic="A" icon="icons/alg.png" style="push"/>
+         </menu>
+      </menuContribution>
+      <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <menu id="org.myau.shaya.ide.popup" label="ALG">
+            <visibleWhen checkEnabled="false">
+               <or>
+                  <with variable="activeEditorId">
+                     <equals value="org.myau.shaya.ide.editor.alg"/>
+                  </with>
+                  <with variable="selection">
+                     <count value="1"/>
+                     <iterate>
+                        <adapt type="org.eclipse.core.resources.IResource">
+                           <test property="org.eclipse.core.resources.name" value="*.alg"/>
+                        </adapt>
+                     </iterate>
+                  </with>
+               </or>
+            </visibleWhen>
+            <command commandId="org.myau.shaya.ide.commands.run" label="Run" style="push"
+                  icon="icons/run.png"/>
+            <command commandId="org.myau.shaya.ide.commands.check" label="Check" style="push"
+                  icon="icons/check.png"/>
+            <command commandId="org.myau.shaya.ide.commands.debug" label="Debug (CLI)" style="push"
+                  icon="icons/debug.png"/>
+            <command commandId="org.myau.shaya.ide.commands.stepDebug" label="Step Debug" style="push"
+                  icon="icons/step.png"/>
+            <command commandId="org.myau.shaya.ide.commands.runLast" label="Run Last" style="push"
+                  icon="icons/last.png"/>
+            <command commandId="org.myau.shaya.ide.commands.refresh" label="Refresh Project" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.newHello" label="New Hello…" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.toggleNature" label="Add/Remove ALG Nature" style="push"
+                  icon="icons/alg16.png"/>
+            <command commandId="org.myau.shaya.ide.commands.toggleComment" label="Toggle Comment" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.gotoMatching" label="Go to Matching Block" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.expandSelection" label="Expand Selection to Block" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.duplicateLine" label="Duplicate Lines" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.findReferences" label="Find References" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.gotoDeclaration" label="Go to Declaration" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.rename" label="Rename…" style="push"/>
+            <command commandId="org.myau.shaya.ide.commands.reindent" label="Reindent" style="push"/>
+         </menu>
+      </menuContribution>
+      <menuContribution locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
+         <toolbar id="org.myau.shaya.ide.toolbar" label="ALG">
+            <command
+                  commandId="org.myau.shaya.ide.commands.run"
+                  label="Run ALG"
+                  icon="icons/run.png"
+                  tooltip="Run current .alg (Ctrl+Alt+R)"
+                  style="push"/>
+            <command
+                  commandId="org.myau.shaya.ide.commands.check"
+                  label="Check ALG"
+                  icon="icons/check.png"
+                  tooltip="Check current .alg (Ctrl+Alt+C)"
+                  style="push"/>
+            <command
+                  commandId="org.myau.shaya.ide.commands.debug"
+                  label="Debug ALG (CLI)"
+                  icon="icons/debug.png"
+                  tooltip="CLI Debug (not available for SCHOOLALGOL)"
+                  style="push"/>
+            <command
+                  commandId="org.myau.shaya.ide.commands.stepDebug"
+                  label="Step Debug ALG"
+                  icon="icons/step.png"
+                  tooltip="Eclipse step-debug (SHAYDBG)"
+                  style="push"/>
+            <command
+                  commandId="org.myau.shaya.ide.commands.runLast"
+                  label="Run Last"
+                  icon="icons/last.png"
+                  tooltip="Re-run last ALG launch (Ctrl+Alt+L)"
+                  style="push"/>
+         </toolbar>
+      </menuContribution>
+      <menuContribution locationURI="menu:help?after=additions">
+         <command
+               commandId="org.myau.shaya.ide.commands.about"
+               label="About ALG IDE / SCHOOLALGOL"
+               icon="icons/alg.png"
+               style="push"/>
+      </menuContribution>
+   </extension>
+
+   <extension point="org.eclipse.ui.bindings">
+      <key
+            commandId="org.myau.shaya.ide.commands.run"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+R"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.check"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+C"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.runLast"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+L"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.debug"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+D"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.stepDebug"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+M2+D"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.toggleComment"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+/"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.gotoMatching"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+P"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.quickOutline"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+O"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.gotoDeclaration"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="F3"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.findReferences"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+G"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.rename"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+M2+R"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.reindent"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+F"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.expandSelection"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+E"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.duplicateLine"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+D"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.moveLineUp"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+ARROW_UP"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.moveLineDown"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+ARROW_DOWN"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.joinLines"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+J"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.sortLines"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M3+M2+S"/>
+   </extension>
+
+   <!-- Preferences -->
+   <extension point="org.eclipse.ui.preferencePages">
+      <page
+            id="org.myau.shaya.ide.preferences"
+            name="ALG"
+            class="org.myau.shaya.ide.prefs.ShayaPreferencePage"/>
+   </extension>
+
+   <extension point="org.eclipse.core.runtime.preferences">
+      <initializer class="org.myau.shaya.ide.prefs.ShayaPreferenceInitializer"/>
+   </extension>
+
+   <!-- Problems marker -->
+   <extension
+         id="shayaProblem"
+         name="ALG Problem"
+         point="org.eclipse.core.resources.markers">
+      <super type="org.eclipse.core.resources.problemmarker"/>
+      <persistent value="true"/>
+   </extension>
+   <extension point="org.eclipse.ui.editors.annotationTypes">
+      <type
+            name="org.myau.shaya.ide.shayaProblem"
+            markerType="org.myau.shaya.ide.shayaProblem"
+            super="org.eclipse.ui.workbench.texteditor.error"/>
+      <type
+            name="org.myau.shaya.ide.occurrence"
+            markerType="org.myau.shaya.ide.occurrence"
+            super="org.eclipse.ui.workbench.texteditor.occurrence"/>
+      <type
+            name="org.myau.shaya.ide.currentline"
+            markerType="org.myau.shaya.ide.currentlinemarker"
+            super="org.eclipse.ui.workbench.texteditor.warning"/>
+   </extension>
+   <extension point="org.eclipse.ui.editors.markerAnnotationSpecification">
+      <specification
+            annotationType="org.myau.shaya.ide.shayaProblem"
+            label="ALG Problem"
+            icon="icons/alg.png"
+            colorPreferenceKey="org.myau.shaya.ide.problem.color"
+            colorPreferenceValue="192,0,0"
+            highlightPreferenceKey="org.myau.shaya.ide.problem.highlight"
+            highlightPreferenceValue="false"
+            overviewRulerPreferenceKey="org.myau.shaya.ide.problem.overview"
+            overviewRulerPreferenceValue="true"
+            verticalRulerPreferenceKey="org.myau.shaya.ide.problem.vertical"
+            verticalRulerPreferenceValue="true"
+            textPreferenceKey="org.myau.shaya.ide.problem.text"
+            textPreferenceValue="true"
+            textStylePreferenceKey="org.myau.shaya.ide.problem.textStyle"
+            textStylePreferenceValue="SQUIGGLES"
+            contributesToHeader="true"
+            presentationLayer="5"
+            showInNextPrevDropdownToolbarAction="true"
+            isGotoNextNavigationTarget="true"
+            includeOnPreferencePage="true"/>
+      <specification
+            annotationType="org.myau.shaya.ide.occurrence"
+            label="ALG Occurrences"
+            colorPreferenceKey="org.myau.shaya.ide.occurrence.color"
+            colorPreferenceValue="212,212,212"
+            highlightPreferenceKey="org.myau.shaya.ide.occurrence.highlight"
+            highlightPreferenceValue="true"
+            overviewRulerPreferenceKey="org.myau.shaya.ide.occurrence.overview"
+            overviewRulerPreferenceValue="true"
+            textPreferenceKey="org.myau.shaya.ide.occurrence.text"
+            textPreferenceValue="false"
+            textStylePreferenceKey="org.myau.shaya.ide.occurrence.textStyle"
+            textStylePreferenceValue="NONE"
+            contributesToHeader="false"
+            presentationLayer="4"
+            showInNextPrevDropdownToolbarAction="false"
+            isGotoNextNavigationTarget="false"/>
+      <specification
+            annotationType="org.myau.shaya.ide.currentline"
+            label="ALG Debug Line"
+            colorPreferenceKey="org.myau.shaya.ide.currentline.color"
+            colorPreferenceValue="255,165,40"
+            highlightPreferenceKey="org.myau.shaya.ide.currentline.highlight"
+            highlightPreferenceValue="true"
+            overviewRulerPreferenceKey="org.myau.shaya.ide.currentline.overview"
+            overviewRulerPreferenceValue="true"
+            verticalRulerPreferenceKey="org.myau.shaya.ide.currentline.vertical"
+            verticalRulerPreferenceValue="true"
+            textPreferenceKey="org.myau.shaya.ide.currentline.text"
+            textPreferenceValue="true"
+            contributesToHeader="false"
+            presentationLayer="5"
+            includeOnPreferencePage="true"
+            icon="icons/currentline.png"/>
+   </extension>
+
+   <!-- Window → Perspective → Open Perspective → ALG -->
+   <extension point="org.eclipse.ui.perspectives">
+      <perspective
+            id="org.myau.shaya.ide.perspective"
+            name="ALG"
+            class="org.myau.shaya.ide.ui.ShayaPerspectiveFactory"
+            icon="icons/alg.png"/>
+   </extension>
+
+   <!-- Project nature + incremental check builder -->
+   <extension
+         id="shayaNature"
+         name="ALG Project Nature"
+         point="org.eclipse.core.resources.natures">
+      <runtime>
+         <run class="org.myau.shaya.ide.nature.ShayaNature"/>
+      </runtime>
+      <builder id="org.myau.shaya.ide.shayaBuilder"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.ide.projectNatureImages">
+      <image
+            id="org.myau.shaya.ide.natureImage"
+            natureId="org.myau.shaya.ide.shayaNature"
+            icon="icons/alg.png"/>
+   </extension>
+
+   <extension
+         id="shayaBuilder"
+         name="ALG Check Builder"
+         point="org.eclipse.core.resources.builders">
+      <builder hasNature="true">
+         <run class="org.myau.shaya.ide.builder.ShayaBuilder"/>
+      </builder>
+   </extension>
+
+   <!-- New wizards -->
+   <extension point="org.eclipse.ui.newWizards">
+      <category id="org.myau.shaya.ide.wizards" name="ALG"/>
+      <wizard
+            id="org.myau.shaya.ide.wizards.newProject"
+            name="ALG Project"
+            category="org.myau.shaya.ide.wizards"
+            icon="icons/alg.png"
+            project="true"
+            class="org.myau.shaya.ide.wizards.ShayaNewProjectWizard">
+         <description>Create an ALG project with Hello.alg (RU) and Hello_en.alg (EN)</description>
+      </wizard>
+      <wizard
+            id="org.myau.shaya.ide.wizards.newHello"
+            name="ALG Hello"
+            category="org.myau.shaya.ide.wizards"
+            icon="icons/run.png"
+            class="org.myau.shaya.ide.wizards.ShayaNewHelloWizard">
+         <description>Create a Hello.alg sample (RU or EN keywords)</description>
+         <selection class="org.eclipse.core.resources.IResource"/>
+      </wizard>
+   </extension>
+
+   <!-- Step-debug markers / breakpoints (SHAYDBG) -->
+   <extension
+         id="lineBreakpointMarker"
+         name="ALG Line Breakpoint"
+         point="org.eclipse.core.resources.markers">
+      <super type="org.eclipse.debug.core.lineBreakpointMarker"/>
+      <persistent value="true"/>
+   </extension>
+   <extension
+         id="currentlinemarker"
+         name="ALG Current Debug Line"
+         point="org.eclipse.core.resources.markers">
+      <super type="org.eclipse.core.resources.textmarker"/>
+      <persistent value="false"/>
+   </extension>
+   <extension point="org.eclipse.debug.core.breakpoints">
+      <breakpoint
+            id="org.myau.shaya.ide.lineBreakpoint"
+            class="org.myau.shaya.ide.debug.ShayaLineBreakpoint"
+            markerType="org.myau.shaya.ide.lineBreakpointMarker"
+            name="ALG Line Breakpoint"/>
+   </extension>
+   <extension point="org.eclipse.core.runtime.adapters">
+      <factory
+            adaptableType="org.myau.shaya.ide.editor.ShayaEditor"
+            class="org.myau.shaya.ide.debug.ShayaBreakpointAdapterFactory">
+         <adapter type="org.eclipse.debug.ui.actions.IToggleBreakpointsTarget"/>
+      </factory>
+   </extension>
+   <extension point="org.eclipse.debug.core.sourceLocators">
+      <sourceLocator
+            id="org.myau.shaya.ide.sourceLocator"
+            class="org.myau.shaya.ide.debug.model.ShayaSourceLocator"
+            name="ALG Source Locator"/>
+   </extension>
+   <extension point="org.eclipse.debug.core.debugModelPresentations">
+      <debugModelPresentation
+            class="org.myau.shaya.ide.debug.ui.ShayaDebugModelPresentation"
+            id="org.myau.shaya.ide.debugModel"/>
+   </extension>
+   <extension point="org.eclipse.debug.core.watchExpressionDelegates">
+      <watchExpressionDelegate
+            debugModel="org.myau.shaya.ide.debugModel"
+            delegateClass="org.myau.shaya.ide.debug.ShayaWatchExpressionDelegate"/>
+   </extension>
+   <extension point="org.eclipse.ui.propertyPages">
+      <page
+            id="org.myau.shaya.ide.breakpointPropertyPage"
+            name="ALG Breakpoint"
+            class="org.myau.shaya.ide.debug.ShayaBreakpointPropertyPage">
+         <enabledWhen>
+            <or>
+               <instanceof value="org.myau.shaya.ide.debug.ShayaLineBreakpoint"/>
+               <adapt type="org.myau.shaya.ide.debug.ShayaLineBreakpoint"/>
+            </or>
+         </enabledWhen>
+      </page>
+   </extension>
+
+   <!-- Run As / Debug As → ALG Application -->
+   <extension point="org.eclipse.debug.core.launchConfigurationTypes">
+      <launchConfigurationType
+            id="org.myau.shaya.ide.launchConfigurationType"
+            name="ALG Application"
+            delegate="org.myau.shaya.ide.launch.ShayaLaunchDelegate"
+            modes="run,debug"
+            public="true"
+            sourceLocatorId="org.myau.shaya.ide.sourceLocator"/>
+   </extension>
+   <extension point="org.eclipse.debug.ui.launchConfigurationTabGroups">
+      <launchConfigurationTabGroup
+            id="org.myau.shaya.ide.launchTabGroup"
+            type="org.myau.shaya.ide.launchConfigurationType"
+            class="org.myau.shaya.ide.launch.ShayaLaunchTabGroup"/>
+   </extension>
+   <extension point="org.eclipse.debug.ui.launchShortcuts">
+      <shortcut
+            id="org.myau.shaya.ide.launchShortcut"
+            name="ALG Application"
+            class="org.myau.shaya.ide.launch.ShayaLaunchShortcut"
+            modes="run,debug"
+            icon="icons/run.png"
+            description="Run .alg with SCHOOLALGOL">
+         <contextualLaunch>
+            <enablement>
+               <with variable="selection">
+                  <count value="1"/>
+                  <iterate>
+                     <adapt type="org.eclipse.core.resources.IResource">
+                        <test property="org.eclipse.core.resources.name" value="*.alg"/>
+                     </adapt>
+                  </iterate>
+               </with>
+            </enablement>
+         </contextualLaunch>
+         <configurationType id="org.myau.shaya.ide.launchConfigurationType"/>
+      </shortcut>
+   </extension>
+
+</plugin>
