@@ -28,8 +28,9 @@ public class ShayaImportTrackHandler extends AbstractHandler {
 		File track = ShayaDocs.findTrackDir();
 		if (track == null || !track.isDirectory()) {
 			MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Import Track",
-					"examples/track not found under the ALG toolchain.\n"
-							+ "Install dropins/schoolalgol-shaya or set Preferences → ALG → Toolchain home.");
+					"Каталог examples/track не найден в toolchain ALG.\n\n"
+							+ "Запустите: .\\install_dropins.ps1 -Examples\n"
+							+ "или укажите Preferences → ALG → Toolchain home.");
 			return null;
 		}
 		try {

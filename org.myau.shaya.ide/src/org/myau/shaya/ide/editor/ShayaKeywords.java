@@ -29,9 +29,9 @@ public final class ShayaKeywords {
 	/** .alg — Kushnirenko + EN aliases (proc/begin/end, if/then/endif, loop/eloop, …). */
 	public static final String[] ALG = {
 			"алг", "арг", "нач", "кон", "конст", "ввод", "вывод", "если", "то", "иначе", "все",
-			"нц", "пока", "для", "от", "до", "кц", "рез", "использовать",
+			"нц", "пока", "для", "от", "до", "кц", "рез", "использовать", "выход", "продолжить", "возврат", "шаг",
 			"proc", "arg", "res", "begin", "end", "const", "input", "output",
-			"if", "then", "else", "endif", "loop", "eloop", "for", "while", "from", "to", "import"
+			"if", "then", "else", "endif", "loop", "eloop", "for", "while", "from", "to", "import", "break", "continue", "return", "step"
 	};
 	public static final String[] ALG_TYPES = {
 			"цел", "вещ", "лог", "лит", "таб", "файл", "запись", "переч", "словарь",
@@ -39,6 +39,16 @@ public final class ShayaKeywords {
 	};
 	public static final String[] ALG_LITERALS = {
 			"да", "нет", "и", "или", "не", "true", "false", "and", "or", "not"
+	};
+	/** Встроенные функции/процедуры (подсветка BUILTIN). */
+	public static final String[] ALG_BUILTINS = {
+			"открыть", "закрыть", "конецфайла", "корень", "модуль", "случ", "случцел",
+			"длина", "подстрока", "вверх", "вниз", "вцел", "ввещ", "встроку",
+			"остаток", "целдел", "степень", "мин", "макс", "округление", "знак",
+			"sin", "cos", "син", "кос", "найти", "размер",
+			"open", "close", "eof", "sqrt", "abs", "rand", "randint",
+			"len", "substr", "upper", "lower", "toint", "toreal", "tostr",
+			"mod", "div", "pow", "min", "max", "round", "sign", "find", "size"
 	};
 
 	public static Dialect dialectOfFileName(String name) {
@@ -59,9 +69,12 @@ public final class ShayaKeywords {
 		return ALG_TYPES;
 	}
 
-	/** Builtin / literal / io keywords for the given dialect (highlighter). */
+	/** Literals + built-in functions for the given dialect (highlighter). */
 	public static String[] builtinsFor(Dialect dialect) {
-		return ALG_LITERALS;
+		String[] out = new String[ALG_LITERALS.length + ALG_BUILTINS.length];
+		System.arraycopy(ALG_LITERALS, 0, out, 0, ALG_LITERALS.length);
+		System.arraycopy(ALG_BUILTINS, 0, out, ALG_LITERALS.length, ALG_BUILTINS.length);
+		return out;
 	}
 
 	/** All proposals (control + types + builtins), unique + sorted, for the given dialect. */

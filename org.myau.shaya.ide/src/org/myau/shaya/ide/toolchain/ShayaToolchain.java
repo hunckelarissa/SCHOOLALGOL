@@ -257,36 +257,39 @@ public final class ShayaToolchain {
 
 		File home = getToolchainHome();
 		if (home == null || !home.isDirectory()) {
-			sb.append("FAIL  Toolchain home not found\n");
-			sb.append("      Set Preferences → ALG → Toolchain home\n");
-			sb.append("      or install dropins/").append(DROPINS_FOLDER).append("/\n");
+			sb.append("ОШИБКА  Toolchain home не найден\n");
+			sb.append("        Preferences → ALG → Toolchain home\n");
+			sb.append("        или установите dropins/").append(DROPINS_FOLDER).append("/\n");
+			sb.append("        Затем: .\\install_dropins.ps1\n");
 			ok = false;
 		} else {
-			sb.append("OK    Toolchain home: ").append(home.getAbsolutePath()).append('\n');
+			sb.append("OK      Toolchain home: ").append(home.getAbsolutePath()).append('\n');
 		}
 
 		File wrap = getRunWrapper();
 		if (wrap == null || !wrap.isFile()) {
-			sb.append("FAIL  tools/shaya-run.bat missing\n");
+			sb.append("ОШИБКА  Нет tools/shaya-run.bat\n");
+			sb.append("        Скопируйте bat: .\\install_dropins.ps1\n");
 			ok = false;
 		} else {
-			sb.append("OK    Wrapper: ").append(wrap.getAbsolutePath()).append('\n');
+			sb.append("OK      Обёртка: ").append(wrap.getAbsolutePath()).append('\n');
 		}
 
 		if (home != null) {
 			File interp = new File(home, "interpreters");
 			if (!interp.isDirectory()) {
-				sb.append("FAIL  interpreters/ missing under toolchain home\n");
+				sb.append("ОШИБКА  Нет каталога interpreters/ в toolchain\n");
 				ok = false;
 			} else {
 				File school = new File(interp, ENGINE_DIR);
 				File mainPy = new File(school, "main.py");
 				if (school.isDirectory() && mainPy.isFile()) {
-					sb.append("OK    Interpreter: interpreters/").append(ENGINE_DIR)
+					sb.append("OK      Интерпретатор: interpreters/").append(ENGINE_DIR)
 							.append("/main.py\n");
 				} else {
-					sb.append("FAIL  interpreters/").append(ENGINE_DIR)
-							.append("/main.py missing\n");
+					sb.append("ОШИБКА  Нет interpreters/").append(ENGINE_DIR)
+							.append("/main.py\n");
+					sb.append("        .\\install_dropins.ps1 синхронизирует *.py\n");
 					ok = false;
 				}
 			}
@@ -298,7 +301,9 @@ public final class ShayaToolchain {
 			ok = false;
 		}
 
-		sb.append(ok ? "\nToolchain looks ready." : "\nFix FAIL items, then Validate again.");
+		sb.append(ok
+				? "\nToolchain готов. Можно Run / Check / Step Debug."
+				: "\nИсправьте пункты «ОШИБКА», затем Validate снова.");
 		return sb.toString();
 	}
 
@@ -309,9 +314,9 @@ public final class ShayaToolchain {
 		if (configured != null && !configured.isBlank()) {
 			File f = new File(configured.trim());
 			if (f.isFile()) {
-				return "OK    Python (prefs): " + f.getAbsolutePath();
+				return "OK      Python (prefs): " + f.getAbsolutePath();
 			}
-			return "FAIL  Python prefs path not a file: " + configured.trim();
+			return "ОШИБКА  Путь Python в prefs не файл: " + configured.trim();
 		}
 		String[] candidates = { "py", "python", "python3" };
 		for (String cmd : candidates) {
@@ -326,11 +331,11 @@ public final class ShayaToolchain {
 				int rc = p.waitFor();
 				if (rc == 0 && !out.isBlank()) {
 					String first = out.lines().findFirst().orElse(out);
-					return "OK    Python (PATH/" + cmd + "): " + first;
+					return "OK      Python (PATH/" + cmd + "): " + first;
 				}
 			} catch (Exception ignored) {
 			}
 		}
-		return "FAIL  Python 3 not found (set Preferences → ALG → Python, or PATH / py -3)";
+		return "ОШИБКА  Python 3 не найден (Preferences → ALG → Python, или PATH / py -3)";
 	}
 }

@@ -21,6 +21,7 @@ def _print_usage() -> None:
     print(f"Интерпретатор/транспилятор языка .alg, версия {__version__}")
     print("Использование: python main.py <путь_к_файлу.alg> [опции]")
     print("               python main.py --repl [опции]")
+    print("  --run                   выполнение программы (по умолчанию)")
     print("  --transpile             вывести C-код в файл <имя>.c вместо выполнения")
     print("  --check                 лексика + синтаксис + семантика (без выполнения)")
     print("  --dump-ast              вывести дерево разбора (AST) вместо выполнения")
@@ -69,7 +70,9 @@ def main() -> None:
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg == "--transpile":
+        if arg == "--run":
+            pass  # Выполнение по умолчанию
+        elif arg == "--transpile":
             transpile_mode = True
         elif arg == "--check":
             check_mode = True

@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: ALG IDE (SCHOOLALGOL)
 Bundle-SymbolicName: org.myau.shaya.ide;singleton:=true
-Bundle-Version: 0.6.4
+Bundle-Version: 0.6.7
 Bundle-Activator: org.myau.shaya.ide.Activator
 Bundle-Vendor: SCHOOLALGOL
 Bundle-ClassPath: .

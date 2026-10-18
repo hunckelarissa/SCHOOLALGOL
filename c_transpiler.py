@@ -3,7 +3,12 @@ import sys
 from ast_nodes import *
 from lang_tokens import TokenType
 from errors import TranspilerError
-from module_loader import load_alg_file
+from module_loader import (
+    CyclicImportError,
+    ModuleFileNotFoundError,
+    ModuleLoadTracker,
+    open_module,
+)
 from version import __version__
 from constants import is_main_program, procedure_alg_comment
 from builtin_names import resolve_builtin, resolve_file_mode
@@ -41,14 +46,23 @@ class CTranspiler(NodeVisitor):
         self.main_code = []
         self.main_program_name = None
         self.functions_code = []
+        self.prototypes: list[str] = []
         self.global_declarations = []
         self.indent_level = 0
         self.var_types = {}  # Name -> C type string
         self.array_offsets = {}
+        self.array_sizes = {}
         self.enum_type_names = set()
         self._tmp_counter = 0
-        self.loaded_modules = set()
-        self._module_load_stack: list[str] = []
+        self._modules = ModuleLoadTracker()
+        self._current_return_var: str | None = None
+        self._in_main = False
+        # Имя функции → список индексов параметров-массивов (для передачи размера)
+        self._array_param_indices: dict[str, list[int]] = {}
+        # Имя функции → C-тип возвращаемого значения (для вывода лог как да/нет)
+        self._func_return_ctypes: dict[str, str] = {}
+        # Имя параметра-массива → имя C-переменной длины (внутри функции)
+        self._array_len_vars: dict[str, str] = {}
 
         # Runtime helpers: str_concat/num_to_str/alg_* → malloc; вызывающий free при необходимости.
         self.runtime_code = r"""
@@ -116,6 +130,18 @@ double alg_atof(const char* s) {
 
 long alg_atol(const char* s) {
     return s ? atol(s) : 0L;
+}
+
+double alg_find(const char* s, const char* sub) {
+    if (!s || !sub) return 0.0;
+    char* pos = strstr(s, sub);
+    return pos ? (double)(pos - s + 1) : 0.0;
+}
+
+double alg_sign(double x) {
+    if (x > 0) return 1.0;
+    if (x < 0) return -1.0;
+    return 0.0;
 }
 
 typedef struct AlgDictEntry {
@@ -217,6 +243,65 @@ double alg_dict_get(AlgDict* d, const char* key) {
             return "AlgDict"
         return "double"
 
+    def _c_type_ptr(self, type_node) -> str:
+        """Тип указателя на элемент массива."""
+        base = self._c_type(type_node, string_const=False)
+        if base.endswith("*"):
+            return base
+        return f"{base}*"
+
+    def _param_signature(self, node) -> str:
+        """Строка параметров C без побочных эффектов (для прототипов)."""
+        parts = []
+        for param in node.params:
+            cname = self._transliterate(param.var_node.name)
+            if getattr(param.type_node, "is_array", False):
+                p_type = self._c_type_ptr(param.type_node)
+                parts.append(f"{p_type} {cname}")
+                parts.append(f"int {cname}_len")
+                parts.append(f"int {cname}_off")
+            else:
+                p_type = self._c_type(param.type_node, string_const=False)
+                parts.append(f"{p_type} {cname}")
+        return ", ".join(parts)
+
+    def _function_prototype(self, node) -> str:
+        """Объявление функции/процедуры для forward-вызовов."""
+        if is_main_program(node.name):
+            return ""
+        trans_name = self._transliterate(node.name)
+        params = self._param_signature(node)
+        if isinstance(node, FuncDecl) and node.return_var_decl:
+            ret = self._c_type(node.return_var_decl.type_node, string_const=False)
+        else:
+            ret = "void"
+        return f"{ret} {trans_name}({params});"
+
+    def _format_params(self, node) -> str:
+        """C-параметры; для таб добавляет `_len` и `_off` (размер и offset)."""
+        params_code = []
+        array_indices: list[int] = []
+        for i, param in enumerate(node.params):
+            cname = self._transliterate(param.var_node.name)
+            if getattr(param.type_node, "is_array", False):
+                p_type = self._c_type_ptr(param.type_node)
+                len_name = f"{cname}_len"
+                off_name = f"{cname}_off"
+                self.var_types[cname] = p_type
+                self.array_sizes[cname] = len_name
+                self.array_offsets[cname] = off_name  # C-выражение offset
+                params_code.append(f"{p_type} {cname}")
+                params_code.append(f"int {len_name}")
+                params_code.append(f"int {off_name}")
+                array_indices.append(i)
+            else:
+                p_type = self._c_type(param.type_node, string_const=False)
+                self.var_types[cname] = p_type
+                params_code.append(f"{p_type} {cname}")
+        self._array_param_indices[self._transliterate(node.name)] = array_indices
+        self._array_param_indices[node.name.lower()] = array_indices
+        return ", ".join(params_code)
+
     def _is_dict_access(self, owner_expr):
         if isinstance(owner_expr, Var):
             return self.var_types.get(self._var_cname(owner_expr)) == "AlgDict"
@@ -297,19 +382,42 @@ double alg_dict_get(AlgDict* d, const char* key) {
     def _append_stmt(self, target_list, code):
         if not code:
             return
-        if "\n" in code:
-            for part in code.strip().split("\n"):
-                line = self.indent() + part.strip()
-                s = line.strip()
-                if s and not s.endswith("}") and not s.endswith(";") and not s.endswith("{"):
-                    line += ";"
-                target_list.append(line)
-        else:
-            line = self.indent() + code
+        raw_lines = code.split("\n")
+        non_empty = [l for l in raw_lines if l.strip()]
+        if not non_empty:
+            return
+        min_indent = min(len(l) - len(l.lstrip(" ")) for l in non_empty)
+        base = self.indent()
+        for part in raw_lines:
+            if not part.strip():
+                continue
+            relative = part[min_indent:] if len(part) >= min_indent else part.lstrip()
+            line = base + relative
             s = line.strip()
             if s and not s.endswith("}") and not s.endswith(";") and not s.endswith("{"):
                 line += ";"
             target_list.append(line)
+
+    def _expr_is_bool(self, item, val: str) -> bool:
+        if isinstance(item, Bool):
+            return True
+        if isinstance(item, Var):
+            return "bool" in self.var_types.get(self._var_cname(item), "")
+        if isinstance(item, SubroutineCall):
+            key = self._transliterate(item.name)
+            ret = self._func_return_ctypes.get(key) or self._func_return_ctypes.get(item.name.lower())
+            return bool(ret and "bool" in ret)
+        if isinstance(item, UnaryOp) and item.op.type == TokenType.НЕ:
+            return True
+        if isinstance(item, BinOp):
+            if item.op.type in (
+                TokenType.И, TokenType.ИЛИ, TokenType.EQ, TokenType.NEQ,
+                TokenType.LTE, TokenType.GTE,
+            ):
+                return True
+            if item.op.type == TokenType.OP and item.op.value in (">", "<"):
+                return True
+        return "bool" in self.var_types.get(val, "")
 
     def _format_print_item(self, item, fmt, file_var):
         val = self.visit(item)
@@ -321,12 +429,24 @@ double alg_dict_get(AlgDict* d, const char* key) {
         precision = self.visit(fmt.precision) if fmt and fmt.precision else None
         cname = val if val in self.var_types else None
         is_str = self._expr_is_c_string(val, cname)
+        is_bool = self._expr_is_bool(item, val)
+
+        if is_bool and not (fmt and width and precision):
+            if fmt and width:
+                lines.append(
+                    f'{print_fn}({print_arg}"%*s ", (int){width}, ({val}) ? "да" : "нет")'
+                )
+            else:
+                lines.append(
+                    f'{print_fn}({print_arg}"%s ", ({val}) ? "да" : "нет")'
+                )
+            return lines
 
         if fmt and width and precision and not is_str:
             lines.append(f'{print_fn}({print_arg}"%*.*f ", (int){width}, (int){precision}, (double){val})')
         elif fmt and width and not is_str:
             t = self.var_types.get(val, "double")
-            if "int" in t or "bool" in t:
+            if "int" in t:
                 lines.append(f'{print_fn}({print_arg}"%*d ", (int){width}, (int){val})')
             else:
                 lines.append(f'{print_fn}({print_arg}"%*g ", (int){width}, (double){val})')
@@ -347,7 +467,7 @@ double alg_dict_get(AlgDict* d, const char* key) {
                 t = self.var_types[val]
                 if "char*" in t:
                     c_fmt, cast = "%s", ""
-                elif "int" in t or "bool" in t:
+                elif "int" in t:
                     c_fmt, cast = "%d", "(int)"
             if has_heap:
                 self._tmp_counter += 1
@@ -367,6 +487,10 @@ double alg_dict_get(AlgDict* d, const char* key) {
         code.extend(self.headers)
         code.append(self.runtime_code)
         code.extend(self.global_declarations)
+        if self.prototypes:
+            code.append("/* Forward declarations */")
+            code.extend(self.prototypes)
+            code.append("")
         code.extend(self.functions_code)
         if self.main_program_name:
             code.append(procedure_alg_comment(self.main_program_name))
@@ -389,32 +513,61 @@ double alg_dict_get(AlgDict* d, const char* key) {
             return "0"
         raise TranspilerError(msg, node)
 
+    def _register_subroutine_signature(self, node) -> None:
+        idxs = [
+            i for i, p in enumerate(node.params)
+            if getattr(p.type_node, "is_array", False)
+        ]
+        cname = self._transliterate(node.name)
+        self._array_param_indices[cname] = idxs
+        self._array_param_indices[node.name.lower()] = idxs
+        if isinstance(node, FuncDecl) and node.return_var_decl:
+            ret = self._c_type(node.return_var_decl.type_node, string_const=False)
+            self._func_return_ctypes[cname] = ret
+            self._func_return_ctypes[node.name.lower()] = ret
+        proto = self._function_prototype(node)
+        if proto and proto not in self.prototypes:
+            self.prototypes.append(proto)
+
     def visit_Program(self, node):
+        # Модули и типы первыми (могут объявить процедуры с таб-параметрами)
         for decl in node.declarations:
-            if isinstance(decl, (ProcDecl, FuncDecl, UseNode, RecordDecl, EnumDecl)):
+            if isinstance(decl, (UseNode, RecordDecl, EnumDecl)):
                 self.visit(decl)
             elif isinstance(decl, (VarDecl, ConstDecl)):
                 code = self.visit(decl)
                 if code:
                     self.global_declarations.append(code)
+        # Регистрация сигнатур + прототипы до генерации тел
+        for decl in node.declarations:
+            if isinstance(decl, (ProcDecl, FuncDecl)):
+                self._register_subroutine_signature(decl)
+        for decl in node.declarations:
+            if isinstance(decl, (ProcDecl, FuncDecl)):
+                self.visit(decl)
 
     def visit_ProcDecl(self, node):
         trans_name = self._transliterate(node.name)
         if is_main_program(node.name):
             self.main_program_name = node.name
-            self.visit_Block(node.block, target_list=self.main_code)
+            prev_main = self._in_main
+            self._in_main = True
+            try:
+                self.visit_Block(node.block, target_list=self.main_code)
+            finally:
+                self._in_main = prev_main
         else:
             self.functions_code.append(procedure_alg_comment(node.name))
             self._log(f"генерация процедуры «{node.name}» → {trans_name}()")
-            params_code = []
-            for param in node.params:
-                p_type = self._c_type(param.type_node, string_const=False)
-                self.var_types[self._transliterate(param.var_node.name)] = p_type
-                params_code.append(f"{p_type} {self._transliterate(param.var_node.name)}")
-            param_str = ", ".join(params_code)
+            param_str = self._format_params(node)
             self.functions_code.append(f"void {trans_name}({param_str}) {{")
             self.indent_level += 1
-            self.visit_Block(node.block, target_list=self.functions_code)
+            prev_ret = self._current_return_var
+            self._current_return_var = None
+            try:
+                self.visit_Block(node.block, target_list=self.functions_code)
+            finally:
+                self._current_return_var = prev_ret
             self.indent_level -= 1
             self.functions_code.append("}")
 
@@ -427,21 +580,23 @@ double alg_dict_get(AlgDict* d, const char* key) {
             if node.return_var_decl
             else "double"
         )
-        params_code = []
-        for param in node.params:
-            p_type = self._c_type(param.type_node, string_const=False)
-            self.var_types[self._transliterate(param.var_node.name)] = p_type
-            params_code.append(f"{p_type} {self._transliterate(param.var_node.name)}")
-        param_str = ", ".join(params_code)
+        param_str = self._format_params(node)
         self.functions_code.append(f"{return_type} {trans_name}({param_str}) {{")
         self.indent_level += 1
+        prev_ret = self._current_return_var
         if node.return_var_decl:
+            self._current_return_var = self._transliterate(node.return_var_decl.var_node.name)
             self.functions_code.append(self.indent() + self.visit(node.return_var_decl))
-        self.visit_Block(node.block, target_list=self.functions_code)
-        if node.return_var_decl:
-            self.functions_code.append(
-                self.indent() + f"return {self._transliterate(node.return_var_decl.var_node.name)};"
-            )
+        else:
+            self._current_return_var = None
+        try:
+            self.visit_Block(node.block, target_list=self.functions_code)
+            if node.return_var_decl:
+                self.functions_code.append(
+                    self.indent() + f"return {self._current_return_var};"
+                )
+        finally:
+            self._current_return_var = prev_ret
         self.indent_level -= 1
         self.functions_code.append("}")
 
@@ -486,10 +641,11 @@ double alg_dict_get(AlgDict* d, const char* key) {
             if "char*" in vtype:
                 if right_c.startswith('"'):
                     right_c = f"strdup({right_c})"
-                if self._needs_free(right_c) or right_c.startswith("strdup("):
-                    if self._heap_alloc_count(right_c) > 1:
-                        self._warn_possible_heap_leak(node, right_c, "присваивание лит")
-                    return f"free({left_c}); {left_c} = {right_c};"
+                elif not self._needs_free(right_c) and not right_c.startswith("strdup("):
+                    right_c = f"strdup({right_c})"
+                if self._heap_alloc_count(right_c) > 1:
+                    self._warn_possible_heap_leak(node, right_c, "присваивание лит")
+                return f"free({left_c}); {left_c} = {right_c};"
         return f"{left_c} = {right_c};"
 
     def visit_Assign(self, node):
@@ -517,16 +673,33 @@ double alg_dict_get(AlgDict* d, const char* key) {
         left = self.visit(node.left)
         right = self.visit(node.right)
         op = node.op.value
+        is_str = self._expr_is_c_string(left) or self._expr_is_c_string(right)
         if op == '=':
+            if is_str:
+                return f"(strcmp({left}, {right}) == 0)"
             op = '=='
         elif op == '<>':
+            if is_str:
+                return f"(strcmp({left}, {right}) != 0)"
             op = '!='
+        elif op == '<':
+            if is_str:
+                return f"(strcmp({left}, {right}) < 0)"
+        elif op == '>':
+            if is_str:
+                return f"(strcmp({left}, {right}) > 0)"
+        elif op == '<=':
+            if is_str:
+                return f"(strcmp({left}, {right}) <= 0)"
+        elif op == '>=':
+            if is_str:
+                return f"(strcmp({left}, {right}) >= 0)"
         elif op == 'и':
             op = '&&'
         elif op == 'или':
             op = '||'
         elif op == '+':
-            if self._expr_is_c_string(left) or self._expr_is_c_string(right):
+            if is_str:
                 result = f"str_concat({left}, {right})"
                 self._warn_possible_heap_leak(node, result, "цепочка конкатенации")
                 return result
@@ -593,7 +766,26 @@ double alg_dict_get(AlgDict* d, const char* key) {
         var = self._var_cname(node.var_node)
         start = self.visit(node.start_val)
         end = self.visit(node.end_val)
-        lines = [f"for ({var} = {start}; {var} <= {end}; {var}++) {{"]
+        lines = []
+        if var not in self.var_types:
+            self.var_types[var] = "int"
+            lines.append(f"int {var};")
+        if node.step_val is not None:
+            step = self.visit(node.step_val)
+            lines.append(
+                f"for ({var} = {start}; "
+                f"(({step}) > 0) ? ({var} <= ({end})) : ({var} >= ({end})); "
+                f"{var} += ({step})) {{"
+            )
+        else:
+            self._tmp_counter += 1
+            st = f"_step_{self._tmp_counter}"
+            lines.append(f"int {st} = (({start}) <= ({end})) ? 1 : -1;")
+            lines.append(
+                f"for ({var} = {start}; "
+                f"({st} > 0) ? ({var} <= ({end})) : ({var} >= ({end})); "
+                f"{var} += {st}) {{"
+            )
         self.indent_level += 1
         for stmt in node.body:
             sc = self.visit(stmt)
@@ -602,6 +794,32 @@ double alg_dict_get(AlgDict* d, const char* key) {
         self.indent_level -= 1
         lines.append(self.indent() + "}")
         return "\n".join(lines)
+
+    def visit_BreakNode(self, node):
+        return "break;"
+
+    def visit_ContinueNode(self, node):
+        return "continue;"
+
+    def visit_ReturnNode(self, node):
+        if node.expr is not None:
+            if not self._current_return_var:
+                return "/* возврат выражение: не в функции */ return 0;"
+            val = self.visit(node.expr)
+            rv = self._current_return_var
+            vtype = self.var_types.get(rv, "")
+            if "char*" in vtype:
+                if val.startswith('"'):
+                    val = f"strdup({val})"
+                elif not self._needs_free(val) and not val.startswith("strdup("):
+                    val = f"strdup({val})"
+                return f"free({rv}); {rv} = {val};\nreturn {rv};"
+            return f"{rv} = {val};\nreturn {rv};"
+        if self._in_main:
+            return "return 0;"
+        if self._current_return_var:
+            return f"return {self._current_return_var};"
+        return "return;"
 
     def visit_SubroutineCall(self, node):
         name = resolve_builtin(node.name)
@@ -637,6 +855,31 @@ double alg_dict_get(AlgDict* d, const char* key) {
             return f"num_to_str((double)({args[0]}))"
         if name == 'конецфайла' and args:
             return f"(feof({args[0]}) != 0)"
+        if name == 'остаток' and len(args) == 2:
+            return f"fmod({args[0]}, {args[1]})"
+        if name == 'целдел' and len(args) == 2:
+            return f"((double)((long)({args[0]}) / (long)({args[1]})))"
+        if name == 'степень' and len(args) == 2:
+            return f"pow({args[0]}, {args[1]})"
+        if name == 'мин' and len(args) == 2:
+            return f"fmin({args[0]}, {args[1]})"
+        if name == 'макс' and len(args) == 2:
+            return f"fmax({args[0]}, {args[1]})"
+        if name == 'округление' and args:
+            return f"round({args[0]})"
+        if name == 'знак' and args:
+            return f"alg_sign({args[0]})"
+        if name == 'sin' and args:
+            return f"sin({args[0]})"
+        if name == 'cos' and args:
+            return f"cos({args[0]})"
+        if name == 'найти' and len(args) == 2:
+            return f"alg_find({args[0]}, {args[1]})"
+        if name == 'размер' and args:
+            raw_arg = args[0]
+            if raw_arg in self.array_sizes:
+                return f"((double){self.array_sizes[raw_arg]})"
+            return f"alg_strlen({args[0]})"
         if name == 'открыть':
             if len(node.actual_params) != 3:
                 return "/* открыть: ожидается 3 аргумента */"
@@ -649,7 +892,20 @@ double alg_dict_get(AlgDict* d, const char* key) {
                 return "/* закрыть: ожидается 1 аргумент */"
             fvar = self._transliterate(node.actual_params[0].name)
             return f"fclose({fvar}); {fvar} = NULL"
-        return f"{self._transliterate(name)}({', '.join(args)})"
+        # Пользовательская подпрограмма: для параметров-массивов передаём ptr, len, offset
+        cname = self._transliterate(name)
+        arr_idxs = self._array_param_indices.get(cname) or self._array_param_indices.get(name)
+        if arr_idxs:
+            expanded = []
+            for i, arg_c in enumerate(args):
+                expanded.append(arg_c)
+                if i in arr_idxs:
+                    size = self.array_sizes.get(arg_c, 0)
+                    off = self.array_offsets.get(arg_c, 1)
+                    expanded.append(str(size))
+                    expanded.append(str(off))
+            args = expanded
+        return f"{cname}({', '.join(args)})"
 
     def visit_MemberAccess(self, node):
         if isinstance(node.owner_expr, Var):
@@ -663,34 +919,27 @@ double alg_dict_get(AlgDict* d, const char* key) {
         return f"{owner}.{member}"
 
     def visit_UseNode(self, node):
-        module_dir = os.path.dirname(os.path.abspath(self.main_filepath))
-        module_path = os.path.normpath(os.path.join(module_dir, node.filepath))
-        if module_path in self._module_load_stack:
-            chain = self._module_load_stack + [module_path]
-            display = " → ".join(os.path.basename(p) for p in chain)
-            raise TranspilerError(f"циклический импорт модулей: {display}", node)
-        if module_path in self.loaded_modules:
-            return ""
-        self._module_load_stack.append(module_path)
-        self.loaded_modules.add(module_path)
-        self._log(f"подключение модуля «{node.filepath}» из {module_path}")
+        base = self.main_filepath
         try:
-            module_ast = load_alg_file(module_path)
-        except FileNotFoundError:
-            self._module_load_stack.pop()
-            self.loaded_modules.discard(module_path)
+            opened = open_module(self._modules, base, node.filepath)
+        except CyclicImportError as e:
+            raise TranspilerError(str(e), node)
+        except ModuleFileNotFoundError as e:
             if self.permissive:
                 self.warnings.emit(
-                    TranspilerWarning(f"файл модуля не найден: {module_path}", node.token)
+                    TranspilerWarning(str(e), node.token)
                 )
                 return ""
-            raise TranspilerError(f"файл модуля не найден: {module_path}", node)
+            raise TranspilerError(str(e), node)
+        if opened is None:
+            return ""
+        module_path, module_ast = opened
+        self._log(f"подключение модуля «{node.filepath}» из {module_path}")
         try:
             self.visit(module_ast)
             self._log(f"модуль «{node.filepath}» включён")
         finally:
-            if self._module_load_stack and self._module_load_stack[-1] == module_path:
-                self._module_load_stack.pop()
+            self._modules.leave(module_path)
         return ""
 
     def visit_ArrayDecl(self, node):
@@ -708,6 +957,7 @@ double alg_dict_get(AlgDict* d, const char* key) {
         c_type = self._c_type(node.type_node)
         cname = self._var_cname(node.var_node)
         self.array_offsets[cname] = start
+        self.array_sizes[cname] = size
         self.var_types[cname] = f"{c_type}*"
         return f"{c_type} {cname}[{size}];"
 
@@ -751,8 +1001,12 @@ double alg_dict_get(AlgDict* d, const char* key) {
                     buf = f"_inbuf_{self._tmp_counter}"
                     vars_code.extend([
                         f"char {buf}[4096];",
-                        f'scanf("%4095s", {buf});',
-                        f"free({cname}); {cname} = strdup({buf});",
+                        f"if (fgets({buf}, (int)sizeof({buf}), stdin)) {{",
+                        f"  size_t _ln = strlen({buf});",
+                        f"  if (_ln && {buf}[_ln-1]=='\\n') {buf}[--_ln]=0;",
+                        f"  if (_ln && {buf}[_ln-1]=='\\r') {buf}[--_ln]=0;",
+                        f"  free({cname}); {cname} = strdup({buf});",
+                        "}",
                     ])
                 else:
                     vars_code.append(f'scanf("%lf", &{cname});')

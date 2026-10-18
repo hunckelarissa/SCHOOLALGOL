@@ -13,6 +13,8 @@ from ast_nodes import (
     Assign,
     BinOp,
     Block,
+    BreakNode,
+    ContinueNode,
     Bool,
     ConstDecl,
     CustomType,
@@ -27,6 +29,7 @@ from ast_nodes import (
     ProcDecl,
     Program,
     RecordDecl,
+    ReturnNode,
     String,
     SubroutineCall,
     Type,
@@ -45,8 +48,14 @@ from alg_warnings import (
 )
 from constants import MAIN_PROGRAM_NAMES, main_program_label
 from errors import SemanticError
-from module_loader import load_alg_file
+from module_loader import (
+    CyclicImportError,
+    ModuleFileNotFoundError,
+    ModuleLoadTracker,
+    open_module,
+)
 from suggestions import format_suggestion_message
+from builtin_names import resolve_builtin
 from types_model import (
     format_var_type,
     get_builtin_arity,
@@ -152,8 +161,10 @@ class SemanticAnalyzer(NodeVisitor):
         self.global_table = SymbolTable("global")
         self.current_table = self.global_table
         self.frames: list[AnalysisFrame] = [AnalysisFrame("global", self.global_table)]
-        self.loaded_modules: set[str] = set()
-        self._module_load_stack: list[str] = []
+        self._modules = ModuleLoadTracker()
+        self._loop_depth = 0
+        self._in_subroutine = False
+        self._in_function = False  # True только внутри алг … рез (FuncDecl)
 
     def _log(self, message: str) -> None:
         if self.verbose:
@@ -298,10 +309,16 @@ class SemanticAnalyzer(NodeVisitor):
         local_table = SymbolTable(parent=self.global_table, name=frame_name)
         self.frames.append(AnalysisFrame(frame_name, local_table))
         prev = self.current_table
+        prev_in_sub = self._in_subroutine
+        prev_in_func = self._in_function
         self.current_table = local_table
+        self._in_subroutine = True
+        self._in_function = isinstance(decl, FuncDecl)
         try:
             for param in decl.params:
                 type_name = self._resolve_type(param.type_node, param.var_node.token)
+                if getattr(param.type_node, "is_array", False):
+                    type_name = f"таб {type_name}"
                 local_table.define(
                     param.var_node.name,
                     "var",
@@ -322,6 +339,8 @@ class SemanticAnalyzer(NodeVisitor):
             self._log(f"область «{frame_name}»: {len(local_table.symbols)} символ(ов)")
         finally:
             self.current_table = prev
+            self._in_subroutine = prev_in_sub
+            self._in_function = prev_in_func
             self.frames.pop()
 
     def _emit_unused_locals(self, table: SymbolTable) -> None:
@@ -338,40 +357,24 @@ class SemanticAnalyzer(NodeVisitor):
             )
 
     def visit_UseNode(self, node: UseNode, base_path: str) -> None:
-        module_dir = os.path.dirname(os.path.abspath(base_path))
-        module_path = os.path.normpath(os.path.join(module_dir, node.filepath))
-        if module_path in self._module_load_stack:
-            chain = self._module_load_stack + [module_path]
-            display = " → ".join(os.path.basename(p) for p in chain)
-            raise SemanticError(
-                f"Циклический импорт модулей: {display}",
-                node.token,
-                self._call_stack(),
-            )
-        if module_path in self.loaded_modules:
+        try:
+            opened = open_module(self._modules, base_path, node.filepath)
+        except CyclicImportError as e:
+            raise SemanticError(str(e), node.token, self._call_stack())
+        except ModuleFileNotFoundError as e:
+            raise SemanticError(str(e), node.token, self._call_stack())
+        if opened is None:
             self._log(f"модуль уже загружен: {node.filepath}")
             return
-        self._module_load_stack.append(module_path)
-        self.loaded_modules.add(module_path)
+        module_path, module_ast = opened
         self._log(f"загрузка модуля «{node.filepath}» из {module_path}")
-        try:
-            module_ast = load_alg_file(module_path)
-        except FileNotFoundError:
-            self._module_load_stack.pop()
-            self.loaded_modules.discard(module_path)
-            raise SemanticError(
-                f"Файл модуля не найден: «{module_path}» (искали относительно «{base_path}»)",
-                node.token,
-                self._call_stack(),
-            )
         try:
             self._process_declarations(module_ast.declarations, module_path)
             for d in module_ast.declarations:
                 if isinstance(d, (ProcDecl, FuncDecl)):
                     self._analyze_subroutine(d)
         finally:
-            if self._module_load_stack and self._module_load_stack[-1] == module_path:
-                self._module_load_stack.pop()
+            self._modules.leave(module_path)
 
     def visit_VarDecl(self, node: VarDecl) -> None:
         type_name = self._resolve_type(node.type_node, node.var_node.token)
@@ -436,6 +439,8 @@ class SemanticAnalyzer(NodeVisitor):
         elif isinstance(stmt, ForNode):
             self.check_expr(stmt.start_val)
             self.check_expr(stmt.end_val)
+            if stmt.step_val is not None:
+                self.check_expr(stmt.step_val)
             var_name = stmt.var_node.name
             if not self.current_table.has(var_name):
                 self.current_table.define(
@@ -452,14 +457,49 @@ class SemanticAnalyzer(NodeVisitor):
                 )
                 self._log(f"нц для: неявное объявление цел «{var_name}»")
             self.current_table.lookup(var_name, mark_used=True)
-            for s in stmt.body:
-                self.check_statement(s)
+            self._check_loop_body(stmt.body)
         elif isinstance(stmt, WhileNode):
             self.check_expr(stmt.condition)
-            for s in stmt.body:
-                self.check_statement(s)
+            self._check_loop_body(stmt.body)
+        elif isinstance(stmt, BreakNode):
+            if self._loop_depth == 0:
+                raise SemanticError(
+                    "Оператор «выход / break» допустим только внутри цикла нц … кц",
+                    stmt.token,
+                    self._call_stack(),
+                )
+        elif isinstance(stmt, ContinueNode):
+            if self._loop_depth == 0:
+                raise SemanticError(
+                    "Оператор «продолжить / continue» допустим только внутри цикла нц … кц",
+                    stmt.token,
+                    self._call_stack(),
+                )
+        elif isinstance(stmt, ReturnNode):
+            if not self._in_subroutine:
+                raise SemanticError(
+                    "Оператор «возврат / return» допустим только внутри процедуры или функции",
+                    stmt.token,
+                    self._call_stack(),
+                )
+            if stmt.expr is not None:
+                if not self._in_function:
+                    raise SemanticError(
+                        "«возврат выражение» допустим только в функции (алг … рез)",
+                        stmt.token,
+                        self._call_stack(),
+                    )
+                self.check_expr(stmt.expr)
         else:
             self.visit(stmt)
+
+    def _check_loop_body(self, body) -> None:
+        self._loop_depth += 1
+        try:
+            for s in body:
+                self.check_statement(s)
+        finally:
+            self._loop_depth -= 1
 
     def _node_token(self, node) -> Any:
         if hasattr(node, "token") and node.token is not None:
@@ -510,21 +550,15 @@ class SemanticAnalyzer(NodeVisitor):
                 return canonical_type(sym.type_name)
             return None
         if isinstance(expr, SubroutineCall):
-            name = expr.name.lower()
-            if name == "вцел":
+            name = resolve_builtin(expr.name)
+            if name in ("вцел", "случцел", "длина", "размер", "целдел", "округление", "знак", "найти"):
                 return "цел"
             if name == "ввещ":
                 return "вещ"
-            if name == "встроку":
+            if name in ("встроку", "подстрока", "вверх", "вниз"):
                 return "лит"
-            if name in ("корень", "модуль", "случ"):
+            if name in ("корень", "модуль", "случ", "остаток", "степень", "мин", "макс", "sin", "cos"):
                 return "вещ"
-            if name == "случцел":
-                return "цел"
-            if name in ("длина",):
-                return "цел"
-            if name in ("подстрока", "вверх", "вниз"):
-                return "лит"
             if name == "конецфайла":
                 return "лог"
             sym = self.global_table.lookup(name)
@@ -668,6 +702,13 @@ class SemanticAnalyzer(NodeVisitor):
         for arg in node.actual_params:
             self.check_expr(arg)
         if is_builtin_name(name):
+            canon = resolve_builtin(name)
+            if not allow_void and canon in ("открыть", "закрыть"):
+                raise SemanticError(
+                    f"Процедура «{name}» не возвращает значение и не может использоваться в выражении",
+                    node.token,
+                    self._call_stack(),
+                )
             expected = get_builtin_arity(name)
             if expected is not None and len(node.actual_params) != expected:
                 raise SemanticError(
@@ -689,6 +730,12 @@ class SemanticAnalyzer(NodeVisitor):
                 err.hint = hint
             raise err
         sub_decl = sym.node
+        if not allow_void and isinstance(sub_decl, ProcDecl):
+            raise SemanticError(
+                f"Процедура «{name}» не возвращает значение и не может использоваться в выражении",
+                node.token,
+                self._call_stack(),
+            )
         if len(node.actual_params) != len(sub_decl.params):
             param_names = ", ".join(p.var_node.name for p in sub_decl.params)
             raise SemanticError(

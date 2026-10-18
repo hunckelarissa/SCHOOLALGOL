@@ -18,9 +18,10 @@ public class ShayaShortcutsDialog extends Dialog {
 	static final String TEXT = ""
 			+ "ALG / SCHOOLALGOL — горячие клавиши\n\n"
 			+ "Запуск\n"
-			+ "  Ctrl+Alt+R        Run (.alg)\n"
-			+ "  Ctrl+Alt+C        Check (lex + parse)\n"
-			+ "  Ctrl+Alt+L        Run Last\n"
+			+ "  Ctrl+Alt+R          Run (.alg)\n"
+			+ "  Ctrl+Alt+C          Check (lex + parse)\n"
+			+ "  Ctrl+Alt+L          Run Last\n"
+			+ "  Ctrl+Alt+Shift+D    Step Debug (SHAYDBG)\n"
 			+ "  Run As → ALG Application\n"
 			+ "  ALG → Recent → Open / Clear Recent\n"
 			+ "  ALG → Welcome…\n\n"
@@ -44,7 +45,7 @@ public class ShayaShortcutsDialog extends Dialog {
 			+ "  File → New → Project → ALG Project\n"
 			+ "  File → New → ALG → ALG Hello\n"
 			+ "  Window → Perspective → ALG\n"
-			+ "  Preferences → ALG (Toolchain home)\n"
+			+ "  Preferences → ALG (Toolchain home, Validate…)\n"
 			+ "  .alg → SCHOOLALGOL\n";
 
 	private Font mono;

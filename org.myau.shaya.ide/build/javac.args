@@ -7,8 +7,14 @@ C:\Users\User\.p2\pool\plugins\org.eclipse.ui_3.201.200.v20221024-2137.jar;C:\Us
 -d
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\build\classes
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\Activator.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\ShayaStartup.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\builder\ShayaBuilder.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaDebugElement.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaDebugTarget.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaSourceLocator.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaStackFrame.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaThread.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaValue.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaVariable.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaBreakpointAdapterFactory.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaBreakpointPropertyPage.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaBreakpoints.java
@@ -18,13 +24,6 @@ F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaLineBre
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaSourceReveal.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaToggleBreakpointsTarget.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ShayaWatchExpressionDelegate.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaDebugElement.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaDebugTarget.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaSourceLocator.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaStackFrame.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaThread.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaValue.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\model\ShayaVariable.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\debug\ui\ShayaDebugModelPresentation.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaAutoIndentStrategy.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaBlockFamilies.java
@@ -89,6 +88,7 @@ F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaRunLastHa
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaSourceResolver.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaStepDebugHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaToggleNatureHandler.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\ShayaStartup.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\toolchain\ShayaDocs.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\toolchain\ShayaToolchain.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\ui\ShayaAboutDialog.java

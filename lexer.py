@@ -49,8 +49,8 @@ class Lexer:
             ('COMMA',     r','),
             ('EQ',        r'='),
             ('OP',        r'[+\-*/><]'),
-            ('NEWLINE',   r'\n'),
-            ('SKIP',      r'[ \t;]+'),
+            ('NEWLINE',   r'\r?\n'),
+            ('SKIP',      r'[ \t\r;]+'),
             ('COMMENT',   r'\|.*'),
             ('MISMATCH',  r'.'),
         ]

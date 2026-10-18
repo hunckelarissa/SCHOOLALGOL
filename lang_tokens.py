@@ -33,6 +33,10 @@ class TokenType(Enum):
     КЦ = "КЦ"
     РЕЗ = "РЕЗ"
     ИСПОЛЬЗОВАТЬ = "ИСПОЛЬЗОВАТЬ"
+    ВЫХОД = "ВЫХОД"
+    ПРОДОЛЖИТЬ = "ПРОДОЛЖИТЬ"
+    ВОЗВРАТ = "ВОЗВРАТ"
+    ШАГ = "ШАГ"
     # Литералы и операторы
     ДА = "ДА"
     НЕТ = "НЕТ"
@@ -100,6 +104,10 @@ _RU_KEYWORDS: dict[str, TokenType] = {
     "кц": TokenType.КЦ,
     "рез": TokenType.РЕЗ,
     "использовать": TokenType.ИСПОЛЬЗОВАТЬ,
+    "выход": TokenType.ВЫХОД,
+    "продолжить": TokenType.ПРОДОЛЖИТЬ,
+    "возврат": TokenType.ВОЗВРАТ,
+    "шаг": TokenType.ШАГ,
     "да": TokenType.ДА,
     "нет": TokenType.НЕТ,
     "и": TokenType.И,
@@ -137,6 +145,10 @@ _EN_KEYWORDS: dict[str, TokenType] = {
     "from": TokenType.ОТ,
     "to": TokenType.ДО,
     "import": TokenType.ИСПОЛЬЗОВАТЬ,
+    "break": TokenType.ВЫХОД,
+    "continue": TokenType.ПРОДОЛЖИТЬ,
+    "return": TokenType.ВОЗВРАТ,
+    "step": TokenType.ШАГ,
     "true": TokenType.ДА,
     "false": TokenType.НЕТ,
     "and": TokenType.И,

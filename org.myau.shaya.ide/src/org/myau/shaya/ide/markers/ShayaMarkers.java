@@ -90,7 +90,8 @@ public final class ShayaMarkers {
 	}
 
 	private static String failMessage(String baseName, String output, int exitCode) {
-		return "Run failed (exit " + exitCode + "). See ALG console.";
+		return "Запуск завершился с ошибкой (код " + exitCode
+				+ "). Смотрите консоль ALG. Подсказка: ALG → Check или исправьте маркеры в Problems.";
 	}
 
 	/** Structured diagnostics only (path:line / строка N) — not loose “errorish” text. */
@@ -174,14 +175,29 @@ public final class ShayaMarkers {
 		if (n.endsWith(".alg")) {
 			if (m.contains("алг") || m.contains("ожида") || m.contains("syntax")
 					|| m.contains("синтакс") || m.contains("нач") || m.contains("кон")) {
-				return "Проверьте алг / нач / кон (классический Кушниренко .alg)";
+				return "проверьте пару алг / нач / кон (и если…все, нц…кц)";
+			}
+			if (m.contains("не объяв") || m.contains("undeclared") || m.contains("неизв")) {
+				return "объявите переменную (цел / вещ / лит / лог) перед использованием";
+			}
+			if (m.contains("тип") || m.contains("type")) {
+				return "проверьте совместимость типов при присваивании :=";
+			}
+			if (m.contains("индекс") || m.contains("index") || m.contains("границ")) {
+				return "проверьте диапазон таб[ниж:верх] и индекс";
+			}
+			if (m.contains("модул") || m.contains("использовать") || m.contains("import")) {
+				return "проверьте путь в использовать \"файл.alg\" рядом с программой";
 			}
 		}
 		if (m.contains("python") && (m.contains("not found") || m.contains("не найден"))) {
-			return "Install Python 3 and put it on PATH (py -3 / python)";
+			return "установите Python 3 и добавьте в PATH (py -3 / python) или Preferences → ALG → Python";
 		}
-		if (m.contains("unknown shaya extension")) {
-			return "Поддерживается только .alg → SCHOOLALGOL";
+		if (m.contains("toolchain") || m.contains("shaya-run") || m.contains("wrapper")) {
+			return "запустите .\\install_dropins.ps1 и проверьте Preferences → ALG → Validate…";
+		}
+		if (m.contains("unknown shaya extension") || m.contains("unknown alg extension")) {
+			return "поддерживается только .alg → SCHOOLALGOL";
 		}
 		return null;
 	}
@@ -199,7 +215,7 @@ public final class ShayaMarkers {
 		IMarker marker = file.createMarker(MARKER_TYPE);
 		String base = message == null || message.isBlank() ? "error" : message.trim();
 		String tip = tipFor(file.getName(), base);
-		marker.setAttribute(IMarker.MESSAGE, tip == null ? base : base + " — tip: " + tip);
+		marker.setAttribute(IMarker.MESSAGE, tip == null ? base : base + " — подсказка: " + tip);
 		marker.setAttribute(IMarker.SEVERITY, severity);
 		int safeLine = Math.max(1, line);
 		marker.setAttribute(IMarker.LINE_NUMBER, safeLine);

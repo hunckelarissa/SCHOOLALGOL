@@ -70,6 +70,10 @@ public class ShayaPreferencePage extends FieldEditorPreferencePage implements IW
 				ShayaPreferenceConstants.CHECK_ON_SAVE,
 				"Check on save (.alg)",
 				getFieldEditorParent()));
+		addField(new BooleanFieldEditor(
+				ShayaPreferenceConstants.SHOW_WELCOME_ON_STARTUP,
+				"Показать Welcome при следующем запуске Eclipse",
+				getFieldEditorParent()));
 	}
 
 	@Override
@@ -85,7 +89,7 @@ public class ShayaPreferencePage extends FieldEditorPreferencePage implements IW
 			public void widgetSelected(SelectionEvent e) {
 				performApply();
 				String status = ShayaToolchain.validateStatus();
-				boolean ok = !status.contains("FAIL");
+				boolean ok = !status.contains("ОШИБКА");
 				if (ok) {
 					MessageDialog.openInformation(getShell(), "ALG Validate", status);
 				} else {

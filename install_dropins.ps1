@@ -1,24 +1,75 @@
-# install_dropins.ps1 — sync SCHOOLALGOL runtime into Eclipse dropins
+# install_dropins.ps1 — sync SCHOOLALGOL toolchain into Eclipse dropins
 # Usage:
 #   .\install_dropins.ps1
 #   .\install_dropins.ps1 -PluginJar
+#   .\install_dropins.ps1 -Examples
 #   .\install_dropins.ps1 -EclipseDropins "D:\path\to\eclipse\dropins"
+#
+# Copies:
+#   *.py              → schoolalgol-shaya\interpreters\SchoolAlgol\
+#   tools\shaya-run.bat → schoolalgol-shaya\tools\
+#   (optional) examples\ → schoolalgol-shaya\examples\
+#   (optional) plugin JAR → dropins\
+# Does NOT copy docs/ unless you sync them yourself (About/menu open GRAMMAR.md from repo or examples).
 
 param(
-    [string]$EclipseDropins = "C:\Users\User\eclipse\java-2022-12\eclipse\dropins",
-    [switch]$PluginJar
+    [string]$EclipseDropins = "",
+    [switch]$PluginJar,
+    [switch]$Examples
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DestInterp = Join-Path $EclipseDropins "schoolalgol-shaya\interpreters\SchoolAlgol"
-$PluginVer = "0.6.4"
+$PluginVer = "0.6.7"
 
-if (-not (Test-Path -LiteralPath $EclipseDropins)) {
-    throw "Eclipse dropins not found: $EclipseDropins"
+function Find-EclipseDropins {
+    param([string]$Preferred)
+    if ($Preferred -and (Test-Path -LiteralPath $Preferred)) {
+        return (Resolve-Path -LiteralPath $Preferred).Path
+    }
+    $candidates = @(
+        "C:\Users\User\eclipse\java-2022-12\eclipse\dropins",
+        (Join-Path $env:USERPROFILE "eclipse\java-2022-12\eclipse\dropins"),
+        (Join-Path $env:USERPROFILE "eclipse\jee-2022-12\eclipse\dropins"),
+        (Join-Path $env:USERPROFILE "eclipse\java-2023-12\eclipse\dropins"),
+        (Join-Path $env:USERPROFILE "eclipse\jee-2023-12\eclipse\dropins")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) {
+            return (Resolve-Path -LiteralPath $c).Path
+        }
+    }
+    # Discover eclipse*\*\dropins under %USERPROFILE%\eclipse
+    $eclipseRoot = Join-Path $env:USERPROFILE "eclipse"
+    if (Test-Path -LiteralPath $eclipseRoot) {
+        $found = Get-ChildItem -LiteralPath $eclipseRoot -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                $d = Join-Path $_.FullName "eclipse\dropins"
+                if (Test-Path -LiteralPath $d) { $d }
+            } |
+            Select-Object -First 1
+        if ($found) { return $found }
+    }
+    return $null
 }
 
+$EclipseDropins = Find-EclipseDropins -Preferred $EclipseDropins
+if (-not $EclipseDropins) {
+    throw @"
+Eclipse dropins not found.
+Pass -EclipseDropins with the full path, e.g.:
+  .\install_dropins.ps1 -EclipseDropins `"D:\path\to\eclipse\dropins`"
+"@
+}
+
+Write-Host "Eclipse dropins: $EclipseDropins"
+
+$Toolchain = Join-Path $EclipseDropins "schoolalgol-shaya"
+$DestInterp = Join-Path $Toolchain "interpreters\SchoolAlgol"
+$DestTools = Join-Path $Toolchain "tools"
+
 New-Item -ItemType Directory -Force -Path $DestInterp | Out-Null
+New-Item -ItemType Directory -Force -Path $DestTools | Out-Null
 
 $pyFiles = Get-ChildItem -LiteralPath $Root -Filter "*.py" -File
 if (-not $pyFiles) {
@@ -31,6 +82,54 @@ foreach ($f in $pyFiles) {
     $copied++
 }
 Write-Host "Synced $copied Python file(s) -> $DestInterp"
+
+$batSrc = Join-Path $Root "tools\shaya-run.bat"
+if (-not (Test-Path -LiteralPath $batSrc)) {
+    throw "Missing $batSrc (required for ALG Run/Check)"
+}
+Copy-Item -LiteralPath $batSrc -Destination (Join-Path $DestTools "shaya-run.bat") -Force
+Write-Host "Synced tools\shaya-run.bat -> $DestTools"
+
+# Short honest README in toolchain (no false claims about full docs/)
+$tcReadme = @(
+    "# SCHOOLALGOL toolchain (Eclipse dropins)",
+    "",
+    "Layout:",
+    "",
+    "  schoolalgol-shaya/",
+    "    tools/shaya-run.bat",
+    "    interpreters/SchoolAlgol/   - runtime *.py from repo root",
+    "    examples/                   - optional (install_dropins.ps1 -Examples)",
+    "    docs/GRAMMAR.md             - synced from repo if present",
+    "",
+    "Preferences -> ALG -> Toolchain home = this folder (or empty for auto-detect).",
+    "Sync: install_dropins.ps1 [-PluginJar] [-Examples]",
+    "See repo IDE_SETUP.md."
+) -join "`n"
+Set-Content -LiteralPath (Join-Path $Toolchain "README.md") -Value $tcReadme -Encoding UTF8
+
+if ($Examples) {
+    $exSrc = Join-Path $Root "examples"
+    if (-not (Test-Path -LiteralPath $exSrc)) {
+        Write-Warning "examples/ not found in repo; skipped."
+    } else {
+        $exDest = Join-Path $Toolchain "examples"
+        if (Test-Path -LiteralPath $exDest) {
+            Remove-Item -LiteralPath $exDest -Recurse -Force
+        }
+        Copy-Item -LiteralPath $exSrc -Destination $exDest -Recurse -Force
+        Write-Host "Synced examples/ -> $exDest"
+    }
+}
+
+# Optional: GRAMMAR.md for About / menu (honest: only if present in repo)
+$grammarSrc = Join-Path $Root "GRAMMAR.md"
+if (Test-Path -LiteralPath $grammarSrc) {
+    $docsDest = Join-Path $Toolchain "docs"
+    New-Item -ItemType Directory -Force -Path $docsDest | Out-Null
+    Copy-Item -LiteralPath $grammarSrc -Destination (Join-Path $docsDest "GRAMMAR.md") -Force
+    Write-Host "Synced GRAMMAR.md -> $docsDest"
+}
 
 if ($PluginJar) {
     $jarCandidates = @(
@@ -48,7 +147,10 @@ if ($PluginJar) {
         foreach ($old in @(
             "org.myau.shaya.ide_0.6.1.jar",
             "org.myau.shaya.ide_0.6.2.jar",
-            "org.myau.shaya.ide_0.6.3.jar"
+            "org.myau.shaya.ide_0.6.3.jar",
+            "org.myau.shaya.ide_0.6.4.jar",
+            "org.myau.shaya.ide_0.6.5.jar",
+            "org.myau.shaya.ide_0.6.6.jar"
         )) {
             $oldPath = Join-Path $EclipseDropins $old
             if (Test-Path -LiteralPath $oldPath) {
@@ -64,4 +166,5 @@ if ($PluginJar) {
 }
 
 Write-Host "Done. Preferences → ALG → Toolchain home should point to:"
-Write-Host "  $(Join-Path $EclipseDropins 'schoolalgol-shaya')"
+Write-Host "  $Toolchain"
+Write-Host "Tip: .\install_dropins.ps1 -Examples   to sync examples/track for Учебный трек…"

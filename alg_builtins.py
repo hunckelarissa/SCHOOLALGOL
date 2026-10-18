@@ -6,6 +6,14 @@ from errors import SemanticError
 from ast_nodes import Var
 from builtin_names import resolve_file_mode
 
+def format_value(value) -> str:
+    """Строковое представление значения .alg: логические «да»/«нет», целые без «.0»."""
+    if isinstance(value, bool):
+        return "да" if value else "нет"
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e16:
+        return str(int(value))
+    return str(value)
+
 def _check_arity(interp, node, expected_count):
     if len(node.actual_params) != expected_count:
         raise SemanticError(
@@ -97,7 +105,12 @@ def built_in_randint(interp, node):
 
 def built_in_len(interp, node):
     _check_arity(interp, node, 1)
-    return float(len(str(interp.visit(node.actual_params[0])[1])))
+    val = interp.visit(node.actual_params[0])[1]
+    if isinstance(val, dict) and val.get('_type') == 'array':
+        return float(len(val['values']))
+    if isinstance(val, dict):
+        return float(len(val))
+    return float(len(format_value(val)))
 
 def built_in_substr(interp, node):
     _check_arity(interp, node, 3)
@@ -132,7 +145,96 @@ def built_in_to_float(interp, node):
 
 def built_in_to_str(interp, node):
     _check_arity(interp, node, 1)
-    return str(interp.visit(node.actual_params[0])[1])
+    return format_value(interp.visit(node.actual_params[0])[1])
+
+def built_in_mod(interp, node):
+    _check_arity(interp, node, 2)
+    a = interp.visit(node.actual_params[0])[1]
+    b = interp.visit(node.actual_params[1])[1]
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        raise SemanticError("Функция 'остаток' применима только к числам", node.token, interp.call_stack)
+    if float(b) == 0:
+        raise SemanticError("Деление на ноль в 'остаток'", node.token, interp.call_stack)
+    return float(a % b)
+
+def built_in_div(interp, node):
+    _check_arity(interp, node, 2)
+    a = interp.visit(node.actual_params[0])[1]
+    b = interp.visit(node.actual_params[1])[1]
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        raise SemanticError("Функция 'целдел' применима только к числам", node.token, interp.call_stack)
+    if int(b) == 0:
+        raise SemanticError("Деление на ноль в 'целдел'", node.token, interp.call_stack)
+    return float(int(a) // int(b))
+
+def built_in_pow(interp, node):
+    _check_arity(interp, node, 2)
+    a = interp.visit(node.actual_params[0])[1]
+    b = interp.visit(node.actual_params[1])[1]
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        raise SemanticError("Функция 'степень' применима только к числам", node.token, interp.call_stack)
+    try:
+        return float(math.pow(a, b))
+    except (ValueError, OverflowError) as e:
+        raise SemanticError(f"Ошибка вычисления степени: {e}", node.token, interp.call_stack)
+
+def built_in_min(interp, node):
+    _check_arity(interp, node, 2)
+    a = interp.visit(node.actual_params[0])[1]
+    b = interp.visit(node.actual_params[1])[1]
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        raise SemanticError("Функция 'мин' применима только к числам", node.token, interp.call_stack)
+    return float(min(a, b))
+
+def built_in_max(interp, node):
+    _check_arity(interp, node, 2)
+    a = interp.visit(node.actual_params[0])[1]
+    b = interp.visit(node.actual_params[1])[1]
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        raise SemanticError("Функция 'макс' применима только к числам", node.token, interp.call_stack)
+    return float(max(a, b))
+
+def built_in_round(interp, node):
+    _check_arity(interp, node, 1)
+    val = interp.visit(node.actual_params[0])[1]
+    if not isinstance(val, (int, float)):
+        raise SemanticError("Функция 'округление' применима только к числам", node.token, interp.call_stack)
+    return float(round(val))
+
+def built_in_sign(interp, node):
+    _check_arity(interp, node, 1)
+    val = interp.visit(node.actual_params[0])[1]
+    if not isinstance(val, (int, float)):
+        raise SemanticError("Функция 'знак' применима только к числам", node.token, interp.call_stack)
+    if val > 0:
+        return 1.0
+    elif val < 0:
+        return -1.0
+    return 0.0
+
+def built_in_sin(interp, node):
+    _check_arity(interp, node, 1)
+    val = interp.visit(node.actual_params[0])[1]
+    if not isinstance(val, (int, float)):
+        raise SemanticError("Функция 'sin' применима только к числам", node.token, interp.call_stack)
+    return math.sin(val)
+
+def built_in_cos(interp, node):
+    _check_arity(interp, node, 1)
+    val = interp.visit(node.actual_params[0])[1]
+    if not isinstance(val, (int, float)):
+        raise SemanticError("Функция 'cos' применима только к числам", node.token, interp.call_stack)
+    return math.cos(val)
+
+def built_in_find(interp, node):
+    _check_arity(interp, node, 2)
+    s = str(interp.visit(node.actual_params[0])[1])
+    sub = str(interp.visit(node.actual_params[1])[1])
+    idx = s.find(sub)
+    return float(idx + 1 if idx >= 0 else 0)
+
+def built_in_size(interp, node):
+    return built_in_len(interp, node)
 
 # Словарь имён встроенных процедур/функций → реализация (interp, node)
 BUILTINS = {
@@ -150,4 +252,15 @@ BUILTINS = {
     'вцел': built_in_to_int,
     'ввещ': built_in_to_float,
     'встроку': built_in_to_str,
+    'остаток': built_in_mod,
+    'целдел': built_in_div,
+    'степень': built_in_pow,
+    'мин': built_in_min,
+    'макс': built_in_max,
+    'округление': built_in_round,
+    'знак': built_in_sign,
+    'sin': built_in_sin,
+    'cos': built_in_cos,
+    'найти': built_in_find,
+    'размер': built_in_size,
 }

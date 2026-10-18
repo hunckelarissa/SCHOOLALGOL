@@ -38,8 +38,8 @@ public final class ShayaLauncher {
 		String engine = ShayaToolchain.engineIdFor(program);
 		if (engine != null && !ShayaToolchain.supportsCheck(engine)) {
 			ShayaConsole.showError(
-					"Check not supported for " + ShayaToolchain.engineDisplayName(engine)
-							+ ".\nUse Run for .alg files.");
+					"Check не поддерживается для " + ShayaToolchain.engineDisplayName(engine)
+							+ ".\nДля .alg используйте Run.");
 			return;
 		}
 		launch(program, workspaceFile, "--check", true);
@@ -79,7 +79,7 @@ public final class ShayaLauncher {
 
 	private static File local(IFile programFile) {
 		if (programFile.getLocation() == null) {
-			ShayaConsole.showError("No local path for " + programFile.getFullPath());
+			ShayaConsole.showError("Нет локального пути для " + programFile.getFullPath());
 			return null;
 		}
 		return programFile.getLocation().toFile();
@@ -89,21 +89,24 @@ public final class ShayaLauncher {
 		File wrapper = ShayaToolchain.getRunWrapper();
 		if (wrapper == null) {
 			ShayaConsole.showError(
-					"ALG toolchain not found.\n"
-							+ "Install dropins/" + ShayaToolchain.DROPINS_FOLDER
-							+ "/ or set Preferences → ALG → Toolchain home.");
+					"Toolchain ALG не найден.\n\n"
+							+ "1. Запустите .\\install_dropins.ps1 (копирует tools\\shaya-run.bat и *.py)\n"
+							+ "2. Preferences → ALG → Toolchain home = dropins/"
+							+ ShayaToolchain.DROPINS_FOLDER + "\n"
+							+ "3. Нажмите Validate…");
 			return;
 		}
 		if (program == null || !program.isFile()) {
-			ShayaConsole.showError("Source file not found on disk.");
+			ShayaConsole.showError("Исходный файл не найден на диске.");
 			return;
 		}
 
 		String engineId = ShayaToolchain.engineIdFor(program);
 		if (engineId == null) {
 			ShayaConsole.showError(
-					"Unknown ALG extension: " + program.getName() + "\n"
-							+ ShayaToolchain.enginesHint());
+					"Неизвестное расширение ALG: " + program.getName() + "\n"
+							+ ShayaToolchain.enginesHint()
+							+ "\nОткройте файл .alg.");
 			return;
 		}
 
@@ -118,7 +121,7 @@ public final class ShayaLauncher {
 			out = console.newOutputStream();
 			out.setEncoding(StandardCharsets.UTF_8.name());
 		} catch (Exception e) {
-			ShayaConsole.showError("Console: " + e.getMessage());
+			ShayaConsole.showError("Консоль: " + e.getMessage());
 			return;
 		}
 
@@ -156,7 +159,7 @@ public final class ShayaLauncher {
 					return Status.OK_STATUS;
 				} catch (Exception e) {
 					final String msg = e.getMessage();
-					Display.getDefault().asyncExec(() -> writeLine(out, "Launch error: " + msg));
+					Display.getDefault().asyncExec(() -> writeLine(out, "Ошибка запуска: " + msg));
 					return new Status(IStatus.ERROR, Activator.PLUGIN_ID, e.getMessage(), e);
 				}
 			}

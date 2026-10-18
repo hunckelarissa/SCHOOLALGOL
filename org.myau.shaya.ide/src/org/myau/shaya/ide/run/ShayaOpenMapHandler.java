@@ -15,16 +15,20 @@ import org.eclipse.ui.handlers.HandlerUtil;
 import org.eclipse.ui.ide.IDE;
 import org.myau.shaya.ide.toolchain.ShayaDocs;
 
-/** Open docs/EXTENSION_MAP.md. */
+/** Open GRAMMAR.md (описание языка .alg). */
 public class ShayaOpenMapHandler extends AbstractHandler {
 
 	@Override
 	public Object execute(ExecutionEvent event) throws ExecutionException {
 		File map = ShayaDocs.findExtensionMap();
 		if (map == null || !map.isFile()) {
-			MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "EXTENSION_MAP",
-					"docs/EXTENSION_MAP.md not found.\n"
-							+ "Re-run install_dropins (copies docs/) or open from the repository.");
+			MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Грамматика",
+					"GRAMMAR.md не найден.\n\n"
+							+ "Что сделать:\n"
+							+ "1. В репозитории SCHOOLALGOL: .\\install_dropins.ps1\n"
+							+ "   (копирует GRAMMAR.md → schoolalgol-shaya\\docs\\)\n"
+							+ "2. Или откройте GRAMMAR.md из корня репозитория.\n"
+							+ "3. Проверьте Preferences → ALG → Toolchain home.");
 			return null;
 		}
 		openFile(map);

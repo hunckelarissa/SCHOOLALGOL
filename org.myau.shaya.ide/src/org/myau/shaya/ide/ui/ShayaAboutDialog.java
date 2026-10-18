@@ -2,6 +2,7 @@ package org.myau.shaya.ide.ui;
 
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.dialogs.IDialogConstants;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
@@ -60,7 +61,8 @@ public class ShayaAboutDialog extends Dialog {
 		cmds.setText(
 				"Run — выполнить программу\n"
 						+ "Check — синтаксическая проверка (lex + parse)\n"
-						+ "Step Debug — пошаговая отладка (SHAYDBG)");
+						+ "Step Debug — пошаговая отладка (SHAYDBG)\n"
+						+ "Ctrl+Alt+Shift+D — горячая клавиша Step Debug");
 
 		Label meta = new Label(area, SWT.WRAP | SWT.CENTER);
 		GridData gdMeta = new GridData(SWT.FILL, SWT.CENTER, true, false);
@@ -74,13 +76,20 @@ public class ShayaAboutDialog extends Dialog {
 		links.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, true, false));
 		links.setLayout(new GridLayout(2, true));
 		Button mapBtn = new Button(links, SWT.PUSH);
-		mapBtn.setText("EXTENSION_MAP…");
+		mapBtn.setText("Грамматика…");
 		mapBtn.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				java.io.File map = ShayaDocs.findExtensionMap();
-				if (map != null) {
+				if (map != null && map.isFile()) {
 					ShayaOpenMapHandler.openFile(map);
+				} else {
+					MessageDialog.openInformation(getShell(), "Грамматика",
+							"GRAMMAR.md не найден.\n\n"
+									+ "Запустите в репозитории:\n"
+									+ "  .\\install_dropins.ps1\n"
+									+ "(копирует GRAMMAR.md в schoolalgol-shaya\\docs\\)\n"
+									+ "или откройте GRAMMAR.md из корня SCHOOLALGOL.");
 				}
 			}
 		});
@@ -90,8 +99,14 @@ public class ShayaAboutDialog extends Dialog {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				java.io.File track = ShayaDocs.findTrackReadme();
-				if (track != null) {
+				if (track != null && track.isFile()) {
 					ShayaOpenMapHandler.openFile(track);
+				} else {
+					MessageDialog.openInformation(getShell(), "Учебный трек",
+							"examples/track/README.md не найден.\n\n"
+									+ "Запустите:\n"
+									+ "  .\\install_dropins.ps1 -Examples\n"
+									+ "или откройте examples/track/ из репозитория.");
 				}
 			}
 		});
@@ -117,7 +132,7 @@ public class ShayaAboutDialog extends Dialog {
 			}
 		} catch (Exception ignored) {
 		}
-		return "(not found — Preferences → ALG)";
+		return "(не найден — Preferences → ALG)";
 	}
 
 	@Override

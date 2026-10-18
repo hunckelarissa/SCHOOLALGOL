@@ -22,4 +22,7 @@ public final class ShayaPreferenceConstants {
 
 	/** If true, indent with spaces; if false, use a single tab. */
 	public static final String INSERT_SPACES = "insertSpacesForTabs";
+
+	/** Show Welcome dialog once after workbench start (then cleared). */
+	public static final String SHOW_WELCOME_ON_STARTUP = "showWelcomeOnStartup";
 }

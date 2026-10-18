@@ -17,8 +17,11 @@ public class ShayaOpenTrackHandler extends AbstractHandler {
 		File readme = ShayaDocs.findTrackReadme();
 		if (readme == null || !readme.isFile()) {
 			MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Учебный трек",
-					"examples/track/README.md not found.\n"
-							+ "Install dropins/schoolalgol-shaya (examples/) or open from the repository.");
+					"examples/track/README.md не найден.\n\n"
+							+ "Что сделать:\n"
+							+ "1. .\\install_dropins.ps1 -Examples\n"
+							+ "2. Или откройте examples/track/ из репозитория SCHOOLALGOL.\n"
+							+ "3. Preferences → ALG → Toolchain home = schoolalgol-shaya.");
 			return null;
 		}
 		ShayaOpenMapHandler.openFile(readme);

@@ -15,5 +15,6 @@ public class ShayaPreferenceInitializer extends AbstractPreferenceInitializer {
 		store.setDefault(ShayaPreferenceConstants.CHECK_ON_SAVE, false);
 		store.setDefault(ShayaPreferenceConstants.INDENT_WIDTH, 2);
 		store.setDefault(ShayaPreferenceConstants.INSERT_SPACES, true);
+		store.setDefault(ShayaPreferenceConstants.SHOW_WELCOME_ON_STARTUP, true);
 	}
 }

@@ -114,11 +114,12 @@ class IfNode(AST):
         self.token = token
 
 class ForNode(AST):
-    """Цикл со счетчиком."""
-    def __init__(self, var_node, start_val, end_val, body, token=None):
+    """Цикл со счетчиком. step_val=None означает шаг ±1 по направлению от→до."""
+    def __init__(self, var_node, start_val, end_val, body, token=None, step_val=None):
         self.var_node = var_node
         self.start_val = start_val
         self.end_val = end_val
+        self.step_val = step_val
         self.body = body
         self.token = token
 
@@ -128,6 +129,22 @@ class WhileNode(AST):
         self.condition = condition
         self.body = body
         self.token = token
+
+class BreakNode(AST):
+    """Досрочный выход из ближайшего цикла: выход / break."""
+    def __init__(self, token):
+        self.token = token
+
+class ContinueNode(AST):
+    """Переход к следующей итерации цикла: продолжить / continue."""
+    def __init__(self, token):
+        self.token = token
+
+class ReturnNode(AST):
+    """Досрочный возврат из функции: возврат [выражение] / return [expr]."""
+    def __init__(self, token, expr=None):
+        self.token = token
+        self.expr = expr
 
 class SubroutineCall(AST):
     """Вызов процедуры или функции."""

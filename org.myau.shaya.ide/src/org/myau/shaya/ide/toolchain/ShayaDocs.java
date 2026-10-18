@@ -10,8 +10,18 @@ public final class ShayaDocs {
 	private ShayaDocs() {
 	}
 
+	/**
+	 * Grammar / extension map doc. Prefer {@code docs/GRAMMAR.md} (synced by
+	 * install_dropins); fall back to repo-relative paths from toolchain home.
+	 */
 	public static File findExtensionMap() {
 		return firstExisting(
+				rel("docs/GRAMMAR.md"),
+				rel("../docs/GRAMMAR.md"),
+				rel("../../docs/GRAMMAR.md"),
+				rel("GRAMMAR.md"),
+				rel("../GRAMMAR.md"),
+				rel("../../GRAMMAR.md"),
 				rel("docs/EXTENSION_MAP.md"),
 				rel("../docs/EXTENSION_MAP.md"),
 				rel("../../docs/EXTENSION_MAP.md"));

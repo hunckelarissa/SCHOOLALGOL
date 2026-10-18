@@ -150,6 +150,9 @@ class Parser:
         elif current.type == TokenType.ВВОД: return self.input_statement()
         elif current.type == TokenType.ЕСЛИ: return self.if_statement()
         elif current.type == TokenType.НЦ: return self.loop_statement()
+        elif current.type == TokenType.ВЫХОД: return BreakNode(self.eat(TokenType.ВЫХОД))
+        elif current.type == TokenType.ПРОДОЛЖИТЬ: return ContinueNode(self.eat(TokenType.ПРОДОЛЖИТЬ))
+        elif current.type == TokenType.ВОЗВРАТ: return self.return_statement()
         else:
             raise ParserError("Неожиданный оператор", current)
 
@@ -214,6 +217,18 @@ class Parser:
         self.eat(TokenType.ВСЕ)
         return IfNode(condition, then_block, else_block, token)
 
+    def return_statement(self):
+        token = self.eat(TokenType.ВОЗВРАТ)
+        cur = self.current_token()
+        expr_start = (
+            TokenType.NUMBER, TokenType.STRING, TokenType.ID,
+            TokenType.ДА, TokenType.НЕТ, TokenType.LPAREN, TokenType.НЕ,
+        )
+        expr = None
+        if cur.type in expr_start or (cur.type == TokenType.OP and cur.value in ("+", "-")):
+            expr = self.logical_or_expr()
+        return ReturnNode(token, expr)
+
     def loop_statement(self):
         nc_token = self.eat(TokenType.НЦ)
         if self.current_token().type == TokenType.ДЛЯ:
@@ -223,9 +238,13 @@ class Parser:
             start_val = self.logical_or_expr()
             self.eat(TokenType.ДО)
             end_val = self.logical_or_expr()
+            step_val = None
+            if self.current_token().type == TokenType.ШАГ:
+                self.eat(TokenType.ШАГ)
+                step_val = self.logical_or_expr()
             body = self.statement_list(stop_tokens=[TokenType.КЦ])
             self.eat(TokenType.КЦ)
-            return ForNode(var_node, start_val, end_val, body, nc_token)
+            return ForNode(var_node, start_val, end_val, body, nc_token, step_val=step_val)
         elif self.current_token().type == TokenType.ПОКА:
             while_token = self.eat(TokenType.ПОКА)
             condition = self.logical_or_expr()

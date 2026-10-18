@@ -53,16 +53,17 @@ public class ShayaWelcomeDialog extends Dialog {
 		gdTip.verticalIndent = 10;
 		tip.setLayoutData(gdTip);
 		tip.setText("Файлы .alg → интерпретатор SCHOOLALGOL (School Algol).\n"
-				+ "Начните с проекта, Hello.alg или шпаргалки клавиш.");
+				+ "Начните с проекта, Hello.alg или шпаргалки клавиш.\n"
+				+ "Отладка: Step Debug (Ctrl+Alt+Shift+D), не CLI Debug.");
 
 		return area;
 	}
 
 	@Override
 	protected void createButtonsForButtonBar(Composite parent) {
-		createButton(parent, ID_NEW_PROJECT, "New Project…", true);
-		createButton(parent, ID_IMPORT_TRACK, "Import Track…", false);
-		createButton(parent, ID_SHORTCUTS, "Shortcuts…", false);
+		createButton(parent, ID_NEW_PROJECT, "Новый проект…", true);
+		createButton(parent, ID_IMPORT_TRACK, "Учебный трек…", false);
+		createButton(parent, ID_SHORTCUTS, "Клавиши…", false);
 		createButton(parent, IDialogConstants.CLOSE_ID, IDialogConstants.CLOSE_LABEL, false);
 	}
 
