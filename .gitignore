@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+
+# Local toolchains / IDE noise
+.tools/
+.idea/
+*.iml
+.vscode/
+
+# Eclipse plug-in build outputs (regenerate via org.myau.shaya.ide/build_plugin.ps1)
+org.myau.shaya.ide/build/
+org.myau.shaya.ide_*.jar
+
+# Accidental C outputs next to sources / temp
+*.exe
+*.o
+*.obj
+/tmp/

@@ -57,12 +57,18 @@ class CTranspiler(NodeVisitor):
         self._modules = ModuleLoadTracker()
         self._current_return_var: str | None = None
         self._in_main = False
+        # Stack of AlgDict C names declared in the current proc/func/main (B2 scope free).
+        self._scope_dicts: list[list[str]] = []
         # Имя функции → список индексов параметров-массивов (для передачи размера)
         self._array_param_indices: dict[str, list[int]] = {}
         # Имя функции → C-тип возвращаемого значения (для вывода лог как да/нет)
         self._func_return_ctypes: dict[str, str] = {}
         # Имя параметра-массива → имя C-переменной длины (внутри функции)
         self._array_len_vars: dict[str, str] = {}
+        # struct C-name → { field_c_name → C type }
+        self._record_field_ctypes: dict[str, dict[str, str]] = {}
+        # C-имя переменной → C-имя типа записи (struct)
+        self._var_record_types: dict[str, str] = {}
 
         # Runtime helpers: str_concat/num_to_str/alg_* → malloc; вызывающий free при необходимости.
         self.runtime_code = r"""
@@ -76,6 +82,14 @@ char* str_concat(const char* s1, const char* s2) {
     return result;
 }
 
+/* Concat with optional free of owned heap operands (nested + without leak). */
+char* alg_str_concat_owned(const char* s1, const char* s2, int free1, int free2) {
+    char* result = str_concat(s1, s2);
+    if (free1) free((char*)s1);
+    if (free2) free((char*)s2);
+    return result;
+}
+
 char* num_to_str(double num) {
     char* buffer = malloc(64);
     if ((long)num == num) sprintf(buffer, "%ld", (long)num);
@@ -85,6 +99,12 @@ char* num_to_str(double num) {
 
 double alg_strlen(const char* s) {
     return (double)strlen(s ? s : "");
+}
+
+double alg_strlen_free(char* s) {
+    double n = alg_strlen(s);
+    free(s);
+    return n;
 }
 
 char* alg_substr(const char* s, int start, int count) {
@@ -173,6 +193,18 @@ double alg_dict_get(AlgDict* d, const char* key) {
     }
     return 0.0;
 }
+
+void alg_dict_free(AlgDict* d) {
+    if (!d) return;
+    AlgDictEntry* e = d->head;
+    while (e) {
+        AlgDictEntry* n = e->next;
+        free(e->key);
+        free(e);
+        e = n;
+    }
+    d->head = NULL;
+}
 // --- End Runtime Helpers ---
 """
 
@@ -219,7 +251,28 @@ double alg_dict_get(AlgDict* d, const char* key) {
     def _array_offset(self, owner_expr):
         if isinstance(owner_expr, Var):
             return self.array_offsets.get(self._var_cname(owner_expr), 1)
+        if isinstance(owner_expr, MemberAccess) and isinstance(owner_expr.owner_expr, Var):
+            owner = self._var_cname(owner_expr.owner_expr)
+            rec = self._var_record_types.get(owner, "")
+            field = self._transliterate(owner_expr.member_token.value)
+            return self.array_offsets.get(f"{rec}.{field}", 1)
         return 1
+
+    def _const_int_bounds(self, start_node, end_node):
+        """Parse constant array bounds for declarations (fallback start=1)."""
+        start_val = self.visit(start_node)
+        end_val = self.visit(end_node)
+        try:
+            start = int(float(start_val))
+        except ValueError:
+            start = 1
+        try:
+            end = int(float(end_val))
+        except ValueError:
+            end = start
+        if start > end:
+            start, end = end, start
+        return start, end, end - start + 1
 
     def indent(self):
         return "    " * self.indent_level
@@ -316,17 +369,39 @@ double alg_dict_get(AlgDict* d, const char* key) {
         text = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
         return f'"{text}"'
 
-    _STRING_EXPR_MARKERS = ("str_concat(", "alg_substr(", "alg_toupper(", "alg_tolower(", "num_to_str(")
+    _STRING_EXPR_MARKERS = (
+        "alg_str_concat_owned(",
+        "str_concat(",
+        "alg_substr(",
+        "alg_toupper(",
+        "alg_tolower(",
+        "num_to_str(",
+    )
+    # Builtins that consume (and free) a heap string argument safely.
+    _OWNED_ARG_BUILTINS = frozenset({"длина", "размер"})
 
     def _needs_free(self, val):
         """Выражение выделяет память через str_concat/num_to_str/alg_* и требует free()."""
+        v = val.lstrip()
+        # Length helpers free their arg and return double — not a heap string result.
+        if v.startswith("alg_strlen_free(") or v.startswith("alg_strlen("):
+            return False
         return any(m in val for m in self._STRING_EXPR_MARKERS)
 
     def _heap_alloc_count(self, c_expr: str) -> int:
+        v = c_expr.lstrip()
+        if v.startswith("alg_strlen_free(") or v.startswith("alg_strlen("):
+            return 0
         return sum(c_expr.count(marker) for marker in self._STRING_EXPR_MARKERS)
 
     def _warn_possible_heap_leak(self, node, c_expr: str, reason: str) -> None:
         if not self._needs_free(c_expr):
+            return
+        # Owned concat frees intermediate operands; net ownership is one pointer.
+        if "alg_str_concat_owned(" in c_expr and reason in (
+            "цепочка конкатенации",
+            "присваивание лит",
+        ):
             return
         nested = self._heap_alloc_count(c_expr) > 1
         if not nested and reason not in ("конст", "аргумент вызова", "словарь"):
@@ -347,24 +422,32 @@ double alg_dict_get(AlgDict* d, const char* key) {
             self._log(f"утечка памяти ({reason}): {preview}")
 
     def _check_call_args_heap(self, node, args: list) -> None:
+        canon = resolve_builtin(node.name)
         string_builtins = frozenset(
             resolve_builtin(n)
             for n in ("длина", "подстрока", "вверх", "вниз", "встроку", "len", "substr", "upper", "lower", "tostr")
         )
-        if resolve_builtin(node.name) not in string_builtins:
+        if canon not in string_builtins:
+            return
+        if canon in self._OWNED_ARG_BUILTINS:
             return
         for arg in args:
             if self._needs_free(arg):
                 self._warn_possible_heap_leak(node, arg, "аргумент вызова")
 
-    def _expr_is_c_string(self, val, cname=None):
+    def _expr_is_c_string(self, val, cname=None, item=None):
         if val.startswith('"'):
             return True
+        v = val.lstrip()
+        if v.startswith("alg_strlen_free(") or v.startswith("alg_strlen("):
+            return False
         if any(m in val for m in self._STRING_EXPR_MARKERS):
             return True
         if cname and "char*" in self.var_types.get(cname, ""):
             return True
         if val in self.var_types and "char*" in self.var_types[val]:
+            return True
+        if item is not None and "char*" in self._field_ctype(item):
             return True
         return False
 
@@ -403,6 +486,8 @@ double alg_dict_get(AlgDict* d, const char* key) {
             return True
         if isinstance(item, Var):
             return "bool" in self.var_types.get(self._var_cname(item), "")
+        if isinstance(item, MemberAccess):
+            return "bool" in self._field_ctype(item)
         if isinstance(item, SubroutineCall):
             key = self._transliterate(item.name)
             ret = self._func_return_ctypes.get(key) or self._func_return_ctypes.get(item.name.lower())
@@ -428,7 +513,7 @@ double alg_dict_get(AlgDict* d, const char* key) {
         width = self.visit(fmt.width) if fmt else None
         precision = self.visit(fmt.precision) if fmt and fmt.precision else None
         cname = val if val in self.var_types else None
-        is_str = self._expr_is_c_string(val, cname)
+        is_str = self._expr_is_c_string(val, cname, item=item)
         is_bool = self._expr_is_bool(item, val)
 
         if is_bool and not (fmt and width and precision):
@@ -546,15 +631,34 @@ double alg_dict_get(AlgDict* d, const char* key) {
             if isinstance(decl, (ProcDecl, FuncDecl)):
                 self.visit(decl)
 
+    def _push_dict_scope(self) -> None:
+        self._scope_dicts.append([])
+
+    def _pop_dict_scope(self) -> list[str]:
+        return self._scope_dicts.pop() if self._scope_dicts else []
+
+    def _emit_dict_frees(self, target_list: list) -> None:
+        names = self._scope_dicts[-1] if self._scope_dicts else []
+        for cname in names:
+            self._append_stmt(target_list, f"alg_dict_free(&{cname});")
+
+    def _dict_free_stmts(self) -> str:
+        """Inline frees before early return (same scope as current proc/func/main)."""
+        names = self._scope_dicts[-1] if self._scope_dicts else []
+        return "".join(f"alg_dict_free(&{n}); " for n in names)
+
     def visit_ProcDecl(self, node):
         trans_name = self._transliterate(node.name)
         if is_main_program(node.name):
             self.main_program_name = node.name
             prev_main = self._in_main
             self._in_main = True
+            self._push_dict_scope()
             try:
                 self.visit_Block(node.block, target_list=self.main_code)
+                self._emit_dict_frees(self.main_code)
             finally:
+                self._pop_dict_scope()
                 self._in_main = prev_main
         else:
             self.functions_code.append(procedure_alg_comment(node.name))
@@ -564,9 +668,12 @@ double alg_dict_get(AlgDict* d, const char* key) {
             self.indent_level += 1
             prev_ret = self._current_return_var
             self._current_return_var = None
+            self._push_dict_scope()
             try:
                 self.visit_Block(node.block, target_list=self.functions_code)
+                self._emit_dict_frees(self.functions_code)
             finally:
+                self._pop_dict_scope()
                 self._current_return_var = prev_ret
             self.indent_level -= 1
             self.functions_code.append("}")
@@ -589,13 +696,16 @@ double alg_dict_get(AlgDict* d, const char* key) {
             self.functions_code.append(self.indent() + self.visit(node.return_var_decl))
         else:
             self._current_return_var = None
+        self._push_dict_scope()
         try:
             self.visit_Block(node.block, target_list=self.functions_code)
+            self._emit_dict_frees(self.functions_code)
             if node.return_var_decl:
                 self.functions_code.append(
                     self.indent() + f"return {self._current_return_var};"
                 )
         finally:
+            self._pop_dict_scope()
             self._current_return_var = prev_ret
         self.indent_level -= 1
         self.functions_code.append("}")
@@ -615,8 +725,11 @@ double alg_dict_get(AlgDict* d, const char* key) {
         cname = self._var_cname(node.var_node)
         self.var_types[cname] = c_type
         if c_type == "AlgDict":
+            if self._scope_dicts:
+                self._scope_dicts[-1].append(cname)
             return f"AlgDict {cname}; alg_dict_init(&{cname});"
         if isinstance(node.type_node, CustomType):
+            self._var_record_types[cname] = c_type
             return f"{c_type} {cname} = {{0}};"
         init_val = "0"
         if "char*" in c_type or c_type == "FILE*":
@@ -634,18 +747,36 @@ double alg_dict_get(AlgDict* d, const char* key) {
             self._warn_possible_heap_leak(node, val, "конст")
         return f"{c_type} {cname} = {val};"
 
+    def _field_ctype(self, member_node) -> str:
+        """C type of a record field access, if known."""
+        if not isinstance(member_node, MemberAccess):
+            return ""
+        if not isinstance(member_node.owner_expr, Var):
+            return ""
+        owner = self._var_cname(member_node.owner_expr)
+        rec = self._var_record_types.get(owner, "")
+        fields = self._record_field_ctypes.get(rec, {})
+        return fields.get(self._transliterate(member_node.member_token.value), "")
+
+    def _string_assign_stmt(self, node, left_c: str, right_c: str) -> str:
+        if right_c.startswith('"'):
+            right_c = f"strdup({right_c})"
+        elif not self._needs_free(right_c) and not right_c.startswith("strdup("):
+            right_c = f"strdup({right_c})"
+        if self._heap_alloc_count(right_c) > 1:
+            self._warn_possible_heap_leak(node, right_c, "присваивание лит")
+        return f"free({left_c}); {left_c} = {right_c};"
+
     def _assign_to_left(self, node, left_c: str, right_c: str) -> str:
         if isinstance(node.left, Var):
             cname = self._var_cname(node.left)
             vtype = self.var_types.get(cname, "")
             if "char*" in vtype:
-                if right_c.startswith('"'):
-                    right_c = f"strdup({right_c})"
-                elif not self._needs_free(right_c) and not right_c.startswith("strdup("):
-                    right_c = f"strdup({right_c})"
-                if self._heap_alloc_count(right_c) > 1:
-                    self._warn_possible_heap_leak(node, right_c, "присваивание лит")
-                return f"free({left_c}); {left_c} = {right_c};"
+                return self._string_assign_stmt(node, left_c, right_c)
+        elif isinstance(node.left, MemberAccess):
+            ftype = self._field_ctype(node.left)
+            if "char*" in ftype:
+                return self._string_assign_stmt(node, left_c, right_c)
         return f"{left_c} = {right_c};"
 
     def visit_Assign(self, node):
@@ -700,7 +831,12 @@ double alg_dict_get(AlgDict* d, const char* key) {
             op = '||'
         elif op == '+':
             if is_str:
-                result = f"str_concat({left}, {right})"
+                f1 = 1 if self._needs_free(left) else 0
+                f2 = 1 if self._needs_free(right) else 0
+                if f1 or f2:
+                    result = f"alg_str_concat_owned({left}, {right}, {f1}, {f2})"
+                else:
+                    result = f"str_concat({left}, {right})"
                 self._warn_possible_heap_leak(node, result, "цепочка конкатенации")
                 return result
         return f"({left} {op} {right})"
@@ -802,6 +938,7 @@ double alg_dict_get(AlgDict* d, const char* key) {
         return "continue;"
 
     def visit_ReturnNode(self, node):
+        frees = self._dict_free_stmts()
         if node.expr is not None:
             if not self._current_return_var:
                 return "/* возврат выражение: не в функции */ return 0;"
@@ -813,13 +950,13 @@ double alg_dict_get(AlgDict* d, const char* key) {
                     val = f"strdup({val})"
                 elif not self._needs_free(val) and not val.startswith("strdup("):
                     val = f"strdup({val})"
-                return f"free({rv}); {rv} = {val};\nreturn {rv};"
-            return f"{rv} = {val};\nreturn {rv};"
+                return f"free({rv}); {rv} = {val};\n{frees}return {rv};"
+            return f"{rv} = {val};\n{frees}return {rv};"
         if self._in_main:
-            return "return 0;"
+            return f"{frees}return 0;"
         if self._current_return_var:
-            return f"return {self._current_return_var};"
-        return "return;"
+            return f"{frees}return {self._current_return_var};"
+        return f"{frees}return;"
 
     def visit_SubroutineCall(self, node):
         name = resolve_builtin(node.name)
@@ -834,6 +971,8 @@ double alg_dict_get(AlgDict* d, const char* key) {
         if name == 'случцел' and len(args) == 2:
             return f"((double)alg_randint((int){args[0]}, (int){args[1]}))"
         if name == 'длина' and args:
+            if self._needs_free(args[0]):
+                return f"alg_strlen_free({args[0]})"
             return f"alg_strlen({args[0]})"
         if name == 'подстрока' and len(args) == 3:
             return f"alg_substr({args[0]}, (int){args[1]}, (int){args[2]})"
@@ -869,9 +1008,9 @@ double alg_dict_get(AlgDict* d, const char* key) {
             return f"round({args[0]})"
         if name == 'знак' and args:
             return f"alg_sign({args[0]})"
-        if name == 'sin' and args:
+        if name == 'син' and args:
             return f"sin({args[0]})"
-        if name == 'cos' and args:
+        if name == 'кос' and args:
             return f"cos({args[0]})"
         if name == 'найти' and len(args) == 2:
             return f"alg_find({args[0]}, {args[1]})"
@@ -879,6 +1018,8 @@ double alg_dict_get(AlgDict* d, const char* key) {
             raw_arg = args[0]
             if raw_arg in self.array_sizes:
                 return f"((double){self.array_sizes[raw_arg]})"
+            if self._needs_free(args[0]):
+                return f"alg_strlen_free({args[0]})"
             return f"alg_strlen({args[0]})"
         if name == 'открыть':
             if len(node.actual_params) != 3:
@@ -943,17 +1084,7 @@ double alg_dict_get(AlgDict* d, const char* key) {
         return ""
 
     def visit_ArrayDecl(self, node):
-        start_val = self.visit(node.start_idx)
-        end_val = self.visit(node.end_idx)
-        try:
-            start = int(float(start_val))
-        except ValueError:
-            start = 1
-        try:
-            end = int(float(end_val))
-        except ValueError:
-            end = start
-        size = end - start + 1
+        start, end, size = self._const_int_bounds(node.start_idx, node.end_idx)
         c_type = self._c_type(node.type_node)
         cname = self._var_cname(node.var_node)
         self.array_offsets[cname] = start
@@ -1015,11 +1146,23 @@ double alg_dict_get(AlgDict* d, const char* key) {
     def visit_RecordDecl(self, node):
         self._log(f"объявление struct «{node.name}»")
         fields = []
+        field_map: dict[str, str] = {}
+        struct_name = self._transliterate(node.name)
         for field in node.fields:
             if isinstance(field, VarDecl):
                 c_type = self._c_type(field.type_node, string_const=False)
-                fields.append(f"    {c_type} {self._transliterate(field.var_node.name)};")
-        struct_name = self._transliterate(node.name)
+                fname = self._transliterate(field.var_node.name)
+                field_map[fname] = c_type
+                fields.append(f"    {c_type} {fname};")
+            elif isinstance(field, ArrayDecl):
+                start, _end, size = self._const_int_bounds(field.start_idx, field.end_idx)
+                c_type = self._c_type(field.type_node, string_const=False)
+                fname = self._transliterate(field.var_node.name)
+                field_map[fname] = f"{c_type}*"
+                fields.append(f"    {c_type} {fname}[{size}];")
+                self.array_offsets[f"{struct_name}.{fname}"] = start
+        self._record_field_ctypes[struct_name] = field_map
+        self._record_field_ctypes[node.name.lower()] = field_map
         struct_def = ["typedef struct {"] + fields + [f"}} {struct_name};"]
         self.global_declarations.append("\n".join(struct_def))
         return ""

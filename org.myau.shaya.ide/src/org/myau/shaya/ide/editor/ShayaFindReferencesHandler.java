@@ -46,6 +46,13 @@ public class ShayaFindReferencesHandler extends AbstractHandler {
 			MessageDialog.openInformation(shell, "Find References", "Place the cursor on an identifier.");
 			return null;
 		}
+		if (ShayaKeywords.isKeyword(word, editor.currentDialect())) {
+			MessageDialog.openInformation(shell, "Find References",
+					"\"" + word + "\" is a keyword / builtin.\n"
+							+ "Find References targets user identifiers only\n"
+							+ "(comments and string literals are skipped).");
+			return null;
+		}
 		IFile file = null;
 		if (editor.getEditorInput() instanceof FileEditorInput) {
 			file = ((FileEditorInput) editor.getEditorInput()).getFile();

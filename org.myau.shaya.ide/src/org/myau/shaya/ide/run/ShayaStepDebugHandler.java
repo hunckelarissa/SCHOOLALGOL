@@ -17,7 +17,6 @@ import org.myau.shaya.ide.toolchain.ShayaToolchain;
 
 /**
  * ALG → Step Debug: Eclipse Debug Framework + SHAYDBG protocol.
- * CLI Debug ({@link ShayaDebugHandler}) remains a separate menu action.
  */
 public class ShayaStepDebugHandler extends AbstractHandler {
 

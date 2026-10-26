@@ -52,9 +52,14 @@
             description="Syntax-check current .alg (lex + parse, no execute)"
             categoryId="org.myau.shaya.ide.category"/>
       <command
+            id="org.myau.shaya.ide.commands.transpile"
+            name="Transpile"
+            description="Transpile current .alg to C (main.py --transpile)"
+            categoryId="org.myau.shaya.ide.category"/>
+      <command
             id="org.myau.shaya.ide.commands.runLast"
             name="Run Last"
-            description="Repeat the last ALG Run / Check"
+            description="Repeat the last ALG Run / Check / Transpile"
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.about"
@@ -70,11 +75,6 @@
             id="org.myau.shaya.ide.commands.gotoMatching"
             name="Go to Matching Block"
             description="Jump between нач/если/нц… and кон/все/кц…"
-            categoryId="org.myau.shaya.ide.category"/>
-      <command
-            id="org.myau.shaya.ide.commands.debug"
-            name="Debug (CLI)"
-            description="Legacy CLI Debug — скрыто для SCHOOLALGOL; используйте Step Debug"
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.stepDebug"
@@ -93,8 +93,8 @@
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.openTrack"
-            name="Учебный трек…"
-            description="Open examples/track/README.md"
+            name="%command.openTrack.name"
+            description="%command.openTrack.description"
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.shortcuts"
@@ -108,8 +108,8 @@
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.openMap"
-            name="Грамматика…"
-            description="Открыть GRAMMAR.md (описание языка .alg)"
+            name="%command.openMap.name"
+            description="%command.openMap.description"
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.importTrack"
@@ -119,7 +119,7 @@
       <command
             id="org.myau.shaya.ide.commands.welcome"
             name="Welcome…"
-            description="Первые шаги: проект, учебный трек, шпаргалка клавиш"
+            description="%command.welcome.description"
             categoryId="org.myau.shaya.ide.category"/>
       <command
             id="org.myau.shaya.ide.commands.duplicateLine"
@@ -186,6 +186,9 @@
             commandId="org.myau.shaya.ide.commands.check"
             class="org.myau.shaya.ide.run.ShayaCheckHandler"/>
       <handler
+            commandId="org.myau.shaya.ide.commands.transpile"
+            class="org.myau.shaya.ide.run.ShayaTranspileHandler"/>
+      <handler
             commandId="org.myau.shaya.ide.commands.runLast"
             class="org.myau.shaya.ide.run.ShayaRunLastHandler"/>
       <handler
@@ -197,9 +200,6 @@
       <handler
             commandId="org.myau.shaya.ide.commands.gotoMatching"
             class="org.myau.shaya.ide.editor.ShayaGotoMatchingHandler"/>
-      <handler
-            commandId="org.myau.shaya.ide.commands.debug"
-            class="org.myau.shaya.ide.run.ShayaDebugHandler"/>
       <handler
             commandId="org.myau.shaya.ide.commands.stepDebug"
             class="org.myau.shaya.ide.run.ShayaStepDebugHandler"/>
@@ -280,6 +280,12 @@
                      icon="icons/check.png"
                      style="push"/>
                <command
+                     commandId="org.myau.shaya.ide.commands.transpile"
+                     label="Transpile"
+                     mnemonic="T"
+                     icon="icons/transpile.png"
+                     style="push"/>
+               <command
                      commandId="org.myau.shaya.ide.commands.runLast"
                      label="Run Last"
                      mnemonic="L"
@@ -319,9 +325,9 @@
                <command commandId="org.myau.shaya.ide.commands.refresh" label="Refresh Project" style="push"/>
                <command commandId="org.myau.shaya.ide.commands.toggleNature" label="Add/Remove ALG Nature" icon="icons/alg16.png" style="push"/>
                <separator name="org.myau.shaya.ide.sep.docs" visible="true"/>
-               <command commandId="org.myau.shaya.ide.commands.openTrack" label="Учебный трек…" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.openTrack" label="%menu.openTrack.label" style="push"/>
                <command commandId="org.myau.shaya.ide.commands.importTrack" label="Import Track as Project" style="push"/>
-               <command commandId="org.myau.shaya.ide.commands.openMap" label="Грамматика…" style="push"/>
+               <command commandId="org.myau.shaya.ide.commands.openMap" label="%menu.openMap.label" style="push"/>
             </menu>
             <separator name="org.myau.shaya.ide.sep.help" visible="true"/>
             <command commandId="org.myau.shaya.ide.commands.welcome" label="Welcome…" icon="icons/alg.png" style="push"/>
@@ -351,6 +357,8 @@
                   icon="icons/run.png"/>
             <command commandId="org.myau.shaya.ide.commands.check" label="Check" style="push"
                   icon="icons/check.png"/>
+            <command commandId="org.myau.shaya.ide.commands.transpile" label="Transpile" style="push"
+                  icon="icons/transpile.png"/>
             <command commandId="org.myau.shaya.ide.commands.stepDebug" label="Step Debug" style="push"
                   icon="icons/step.png"/>
             <command commandId="org.myau.shaya.ide.commands.runLast" label="Run Last" style="push"
@@ -382,6 +390,12 @@
                   label="Check ALG"
                   icon="icons/check.png"
                   tooltip="Check current .alg (Ctrl+Alt+C)"
+                  style="push"/>
+            <command
+                  commandId="org.myau.shaya.ide.commands.transpile"
+                  label="Transpile ALG"
+                  icon="icons/transpile.png"
+                  tooltip="Transpile .alg → .c (Ctrl+Alt+T)"
                   style="push"/>
             <command
                   commandId="org.myau.shaya.ide.commands.stepDebug"
@@ -417,6 +431,11 @@
             contextId="org.eclipse.ui.contexts.window"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M3+C"/>
+      <key
+            commandId="org.myau.shaya.ide.commands.transpile"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+T"/>
       <key
             commandId="org.myau.shaya.ide.commands.runLast"
             contextId="org.eclipse.ui.contexts.window"
@@ -498,7 +517,7 @@
    <extension point="org.eclipse.ui.preferencePages">
       <page
             id="org.myau.shaya.ide.preferences"
-            name="ALG"
+            name="%preferencePage.name"
             class="org.myau.shaya.ide.prefs.ShayaPreferencePage"/>
    </extension>
 
@@ -624,23 +643,23 @@
 
    <!-- New wizards -->
    <extension point="org.eclipse.ui.newWizards">
-      <category id="org.myau.shaya.ide.wizards" name="ALG"/>
+      <category id="org.myau.shaya.ide.wizards" name="%wizard.category.name"/>
       <wizard
             id="org.myau.shaya.ide.wizards.newProject"
-            name="ALG Project"
+            name="%wizard.newProject.name"
             category="org.myau.shaya.ide.wizards"
             icon="icons/alg.png"
             project="true"
             class="org.myau.shaya.ide.wizards.ShayaNewProjectWizard">
-         <description>Create an ALG project with Hello.alg (RU) and Hello_en.alg (EN)</description>
+         <description>%wizard.newProject.description</description>
       </wizard>
       <wizard
             id="org.myau.shaya.ide.wizards.newHello"
-            name="ALG Hello"
+            name="%wizard.newHello.name"
             category="org.myau.shaya.ide.wizards"
             icon="icons/alg.png"
             class="org.myau.shaya.ide.wizards.ShayaNewHelloWizard">
-         <description>Create a Hello.alg sample (RU or EN keywords)</description>
+         <description>%wizard.newHello.description</description>
          <selection class="org.eclipse.core.resources.IResource"/>
       </wizard>
    </extension>

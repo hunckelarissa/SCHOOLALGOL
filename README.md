@@ -1,250 +1,210 @@
-# SCHOOLALGOL — School Algol (.alg)
+# SCHOOLALGOL — School Algol (`.alg`)
 
-Учебный язык программирования **School Algol** (расширение `.alg`) и его среда выполнения: интерпретатор на Python, семантический анализ, транспиляция в C, отладка SHAYDBG и плагин Eclipse **ALG**.
+Educational programming language **School Algol** (`.alg`) and its runtime: Python interpreter, semantic analysis, C transpilation, SHAYDBG step debugging, and the Eclipse **ALG** plug-in.
 
-| Компонент | Версия | Источник |
-|-----------|--------|----------|
-| Движок (интерпретатор / транспилятор) | **1.2.1** | `version.py` |
-| Плагин Eclipse `org.myau.shaya.ide` | **0.6.7** | `META-INF/MANIFEST.MF` |
+| Component | Version | Source |
+|-----------|---------|--------|
+| Engine (interpreter / transpiler) | **1.2.1** | `version.py` |
+| Eclipse plug-in `org.myau.shaya.ide` | **0.6.11** | `META-INF/MANIFEST.MF` |
 
-Документы:
+**Language:** [Русский README](README.ru.md)
 
-| Файл | Содержание |
-|------|------------|
-| **[GRAMMAR.md](GRAMMAR.md)** | Грамматика, семантика, RU/EN, ограничения C |
-| **[IDE_SETUP.md](IDE_SETUP.md)** | Установка и настройка плагина ALG в Eclipse |
-| **[docs/SHAYDBG.md](docs/SHAYDBG.md)** | Протокол Step Debug (SHAYDBG): события, команды, BP |
-| **[TODO_2026.md](TODO_2026.md)** | Аудит 2026 и закрытый бэклог (CRLF, builtins, break/continue, C-паритет) |
-| **[AUDIT.md](AUDIT.md)** | Исторический технический аудит прототипа (закрыт) |
+| Document | Contents |
+|----------|----------|
+| **[GRAMMAR.md](GRAMMAR.md)** / [GRAMMAR.ru.md](GRAMMAR.ru.md) | Grammar, semantics, RU/EN keywords, C limits |
+| **[IDE_SETUP.md](IDE_SETUP.md)** / [IDE_SETUP.ru.md](IDE_SETUP.ru.md) | Eclipse ALG install & toolchain |
+| **[docs/SHAYDBG.md](docs/SHAYDBG.md)** / [docs/SHAYDBG.ru.md](docs/SHAYDBG.ru.md) | Step Debug wire protocol (SHAYDBG) |
+| **[TODO.md](TODO.md)** | **Active roadmap** (bilingualism, C parity, IDE) |
+| **[TODO_2026.md](TODO_2026.md)** | Closed 2026 audit backlog |
+| **[AUDIT.md](AUDIT.md)** | Historical prototype audit (closed) |
+| **[LICENSE](LICENSE)** | **MIT** (SPDX) |
+| **[VERSIONING.md](VERSIONING.md)** | Engine + plug-in bump checklist |
 
-Каталог `Gemini_reference/` — справочная копия родственного проекта (не путать с брендингом SCHOOLALGOL / ALG).
-
----
-
-## Что это за проект
-
-**SCHOOLALGOL** — пайплайн `Lexer → Parser → AST → SemanticAnalyzer → Interpreter | CTranspiler` для файлов `.alg`.
-
-Язык — учебный алгоритмический диалект с русскими ключевыми словами (в духе школьного Алгола/ШАЯ, но **самостоятельный** синтаксис: `таб`, `использовать`, `словарь`, `<>`, `нц для` …). С **1.1.x** добавлены английские синонимы тех же токенов (`proc`/`begin`/`int`/`output` …); русские программы не ломаются. В одном файле допустимо смешение RU и EN.
-
-**Плагин** `org.myau.shaya.ide` в UI называется **ALG**: редактор `.alg`, Run / Check / Step Debug, шаблоны, перспектива, настройки toolchain.
+`Gemini_reference/` is a reference snapshot of a related project — not SCHOOLALGOL / ALG branding.
 
 ---
 
-## Структура репозитория
+## What this project is
 
-| Путь | Назначение |
-|------|------------|
-| `main.py` | CLI: интерпретация, `--transpile`, `--check`, REPL, AST, SHAYDBG |
-| `version.py` | Единая версия движка |
-| `lexer.py`, `parser.py`, `ast_nodes.py` | Лексика, синтаксис, AST |
-| `semantic_analyzer.py`, `types_model.py` | Статический анализ до выполнения |
-| `interpreter.py`, `alg_builtins.py` | Интерпретатор и встроенные |
-| `c_transpiler.py` | Генерация C |
-| `builtin_names.py` | Алиасы встроенных RU ↔ EN |
-| `module_loader.py` | Загрузка `использовать` / `import` |
-| `repl.py`, `ast_dump.py` | REPL и `--dump-ast` |
-| `shay_debug_protocol.py` | Протокол SHAYDBG (`--debug-protocol`) |
-| `launcher.py` | Полный цикл: interpret → C → GCC → exe (для `program.alg`) |
-| `test_basic.py`, `test_bilingual.py` | Базовые и билингвальные тесты |
-| `test_audit_2026.py`, `test_backlog_2026.py`, `test_modules_arrays_2026.py` | Тесты аудита/бэклога 2026 |
-| `pytest.ini` | Исключает `Gemini_reference/` из сбора тестов |
-| `examples/`, `examples/en/` | Примеры (RU и EN) |
-| `program.alg`, `utils.alg` | Демо-программа и модуль |
-| `org.myau.shaya.ide/` | Исходники плагина Eclipse ALG |
-| `install_dropins.ps1` | Синхронизация `*.py`, `tools/shaya-run.bat` (и опционально JAR / examples) в Eclipse dropins |
-| `Gemini_reference/` | Справочный снимок (документы/код другого бренда) |
+**SCHOOLALGOL** is the pipeline `Lexer → Parser → AST → SemanticAnalyzer → Interpreter | CTranspiler` for `.alg` files.
+
+The language is an educational algorithmic dialect with **Russian and English** keyword synonyms (same `TokenType`; mix allowed in one file). Syntax is **not** classical ШАЯ (`таб`, `использовать`, `словарь`, `<>`, `нц для` / `loop for`, …).
+
+The Eclipse plug-in `org.myau.shaya.ide` ships as **ALG**: `.alg` editor, Run / Check / Transpile / Step Debug, templates, perspective, toolchain preferences.
 
 ---
 
-## Язык School Algol (.alg)
+## Repository layout
 
-Подробности — в **[GRAMMAR.md](GRAMMAR.md)**. Кратко по возможностям движка **1.2.1**.
+| Path | Role |
+|------|------|
+| `main.py` | CLI: run, `--transpile`, `--check`, REPL, AST dump, SHAYDBG |
+| `version.py` | Single engine version |
+| `lexer.py`, `parser.py`, `ast_nodes.py` | Lex / parse / AST |
+| `semantic_analyzer.py`, `types_model.py` | Static checks |
+| `interpreter.py`, `alg_builtins.py` | Runtime & builtins |
+| `c_transpiler.py` | C code generation |
+| `builtin_names.py` | Builtin RU ↔ EN aliases |
+| `module_loader.py` | `использовать` / `import` |
+| `repl.py`, `ast_dump.py` | REPL and `--dump-ast` |
+| `shay_debug_protocol.py` | SHAYDBG (`--debug-protocol`) |
+| `launcher.py` | Full cycle for `program.alg` (interpret → C → GCC → exe) |
+| `test_*.py`, `pytest.ini` | Tests (`Gemini_reference/` excluded) |
+| `examples/`, `examples/en/` | Lessons (RU and EN) |
+| `org.myau.shaya.ide/` | Eclipse ALG sources |
+| `install_dropins.ps1` | Sync engine + optional JAR/examples into Eclipse dropins |
 
-### Обзор
+---
 
-- **Точка входа:** процедура без параметров `основнаяпрограмма` или `mainprogram` (имена регистронезависимы).
-- **Комментарии:** строка начинается с `|`.
-- **Двуязычность:** ключевые слова и встроенные — синонимы одного `TokenType` (модель «как в 1С»). См. таблицу в GRAMMAR.md.
-- **Модули:** `использовать "файл.alg"` / `import "…"`. Путь относительно текущего файла, без sandbox; циклический импорт — ошибка с цепочкой.
-- **Семантика:** перед выполнением и транспиляцией — `SemanticAnalyzer` (типы, объявления, вызовы). Предупреждения (`AssignTypeWarning`, `ImplicitDeclareWarning`, `MemoryLeakWarning` …); `--warnings-as-errors` → код выхода 3.
+## Language (engine 1.2.1)
 
-### Типы
+Details: **[GRAMMAR.md](GRAMMAR.md)** (EN) / **[GRAMMAR.ru.md](GRAMMAR.ru.md)** (RU).
 
-| Тип | Смысл | Примечание |
-|-----|--------|------------|
-| `цел` / `int` | целое | в интерпретаторе арифметика через float; при дробном присваивании — предупреждение |
-| `вещ` / `real` | вещественное | |
-| `лит` / `str` | строка | escape: `\n` `\t` `\r` `\"` `\\` |
-| `лог` / `bool` | логический | `да`/`нет`, `true`/`false` |
-| `таб` / `tab` | массив `имя[нач:кон]` | произвольный начальный индекс; в C — offset |
-| `файл` / `file` | файл | `открыть`/`закрыть`/`конецфайла` |
-| `словарь` / `dict` | строковый ключ → число | в C — только `double` |
-| `запись` / `rec` | структура | поля через `.` |
-| `переч` / `enum` | перечисление | |
+### Overview
 
-### Управление и процедуры
+- **Entry point:** parameterless procedure `основнаяпрограмма` or `mainprogram` (case-insensitive).
+- **Comments:** lines starting with `|`.
+- **Bilingual keywords/builtins:** one token type, two spellings — see GRAMMAR tables.
+- **Modules:** `использовать "file.alg"` / `import "…"`. Path relative to the current file; no sandbox; cyclic import errors include the chain.
+- **Semantics:** `SemanticAnalyzer` before run/transpile. Warnings (`AssignTypeWarning`, …); `--warnings-as-errors` → exit code 3.
 
-- Присваивание `:=`; `вывод` / `ввод` (в т.ч. в файл); формат `вывод x:ширина:точность`.
-- `если … то … [иначе …] все` / `if … then … [else …] endif`.
-- `нц пока … кц` / `loop while … eloop`.
-- `нц для i от a до b [шаг s] … кц` / `loop for … from … to … [step s] … eloop` — без шага направление ±1 выбирается автоматически.
-- `выход` / `break`, `продолжить` / `continue` — только внутри цикла.
-- `возврат` / `return` [выражение] — из процедуры/функции (с выражением — только при `рез`).
-- `алг` / `proc` с `арг`/`рез` (`arg`/`res`); тело в `нач`…`кон` / `begin`…`end`.
-- Операторы: `+ - * /`, сравнения `= <> > < >= <=`, логика `и`/`или`/`не` (`and`/`or`/`not`).
+### Types
 
-### Встроенные (RU / EN)
+| Type | Meaning | Notes |
+|------|---------|--------|
+| `цел` / `int` | integer | interpreter arithmetic via float; fractional assign warns |
+| `вещ` / `real` | real | |
+| `лит` / `str` | string | escapes: `\n` `\t` `\r` `\"` `\\` |
+| `лог` / `bool` | boolean | `да`/`нет`, `true`/`false` |
+| `таб` / `tab` | array `name[lo:hi]` | arbitrary lower bound; C uses offset |
+| `файл` / `file` | file | `открыть`/`open`, … |
+| `словарь` / `dict` | string → number | C values are `double` only |
+| `запись` / `rec` | record | fields via `.` |
+| `переч` / `enum` | enumeration | |
+
+### Control flow
+
+- Assignment `:=`; `вывод`/`output`, `ввод`/`input` (incl. files); format `output x:width:prec`.
+- `если`… / `if`…; `нц пока`… / `loop while`…; `нц для`…`[шаг]` / `loop for`…`[step]` (auto ±1 if step omitted).
+- `выход`/`break`, `продолжить`/`continue` (loops only); `возврат`/`return` [expr].
+- `алг`/`proc` with `арг`/`arg`, `рез`/`res`.
+
+### Builtins (RU / EN)
 
 `открыть`/`open`, `закрыть`/`close`, `конецфайла`/`eof`, `корень`/`sqrt`, `модуль`/`abs`, `случ`/`rand`, `случцел`/`randint`, `длина`/`len`, `подстрока`/`substr`, `вверх`/`upper`, `вниз`/`lower`, `вцел`/`toint`, `ввещ`/`toreal`, `встроку`/`tostr`, `остаток`/`mod`, `целдел`/`div`, `степень`/`pow`, `мин`/`min`, `макс`/`max`, `округление`/`round`, `знак`/`sign`, `син`/`sin`, `кос`/`cos`, `найти`/`find`, `размер`/`size`.
 
-Режимы файла: `чтение`/`read`, `запись`/`write`, `дозапись`/`append`.
+File modes: `чтение`/`read`, `запись`/`write`, `дозапись`/`append`.
 
-### Интерпретатор и C
+### Interpreter and C
 
-| Режим | Команда | Результат |
-|-------|---------|-----------|
-| Интерпретация | `python main.py файл.alg` или `--run` | выполнение в Python |
-| Транспиляция | `python main.py файл.alg --transpile` | файл `файл.c` |
-| Проверка | `python main.py файл.alg --check` | lex + parse + семантика, без выполнения |
+| Mode | Command | Result |
+|------|---------|--------|
+| Run | `python main.py file.alg` or `--run` | execute in Python |
+| Transpile | `python main.py file.alg --transpile` | write `file.c` |
+| Check | `python main.py file.alg --check` | lex + parse + semantics |
 
-В C: `файл` → `FILE*`; записи/перечисления; словари; forward-прототипы функций; параметры-`таб` как `(T*, len, offset)`; `--keep-cyrillic`, `--permissive`.
+C backend: `FILE*`, records/enums, dicts, forward prototypes, array params `(T*, len, offset)`, `--keep-cyrillic`, `--permissive`.
 
-Вывод: целые без `.0`; логические — **да** / **нет** (в т.ч. результат функции типа `лог`).
+Output: integers without `.0`; booleans as **да** / **нет** (including `лог` function results).
 
-**Ограничения паритета интерпретатор ↔ C:**
+**Known interpreter ↔ C gaps:** PRNGs (`случ`/`случцел`) differ (no shared seed); dict values are `double` only in C. `длина(number)` / `len(number)` is an error in both. See GRAMMAR / [TODO.md](TODO.md) epic B.
 
-- `длина(число)` — в интерпретаторе длина `str(n)`; в C ожидается строка.
-- `случ` / `случцел` — разные ГПСЧ (Python vs C), последовательности не совпадают.
-- Словарь в C хранит только `double`.
-- Сеть / host-API и упаковка VS Code из `Gemini_reference` в этот репозиторий не портированы.
+### CLI flags
 
-### Отладка и диагностика CLI
-
-| Флаг | Назначение |
-|------|------------|
-| `--run` | Явный режим выполнения (по умолчанию) |
-| `--verbose` | Этапы пайплайна и токены RU/EN в stderr |
-| `--trace` | Пошаговая трассировка операторов |
-| `--dump-ast` [`--dump-ast-format text\|json`] | Дерево разбора |
-| `--repl` [`--lang ru\|en`] | Интерактивный режим |
-| `--debug-protocol` | SHAYDBG JSONL (для Eclipse Step Debug); спека — [docs/SHAYDBG.md](docs/SHAYDBG.md) |
-| `--break N` | Точка останова по номеру строки (можно повторять) |
-| `--warnings-as-errors` | Предупреждения → exit 3 |
-| `--keep-cyrillic` | С `--transpile`: кириллица в идентификаторах C |
-| `--permissive` | С `--transpile`: неизвестные узлы → предупреждение |
-| `--version` / `--help` | Версия / справка |
+| Flag | Purpose |
+|------|---------|
+| `--run` | Explicit run (default) |
+| `--verbose` / `--trace` | Pipeline / statement tracing |
+| `--dump-ast` [`--dump-ast-format text\|json`] | AST dump |
+| `--repl` [`--lang ru\|en`] | REPL |
+| `--repl-persist` | REPL with persistent variables across fragments |
+| `--lang ru\|en` | UI language (help, error wrappers; also env `ALG_LANG`); default `ru` |
+| `--debug-protocol` / `--break N` | SHAYDBG ([spec](docs/SHAYDBG.md)) |
+| `--warnings-as-errors` | Warnings → exit 3 |
+| `--keep-cyrillic` / `--permissive` | With `--transpile` |
+| `--version` / `--help` | Version / help |
 
 ---
 
-## Плагин ALG (Eclipse)
+## Eclipse ALG plug-in
 
-Плагин **`org.myau.shaya.ide` 0.6.7** — IDE для `.alg` поверх движка SCHOOLALGOL. В меню, перспективе и Preferences бренд **ALG** (Java-пакет `org.myau.shaya.ide` сохранён).
+Plug-in **`org.myau.shaya.ide` 0.6.11** — IDE for `.alg` on the SCHOOLALGOL engine. UI brand **ALG** (Java package name unchanged). Bilingual UI via Eclipse NLS (`messages.properties` / `messages_ru.properties`).
 
-Полная установка — **[IDE_SETUP.md](IDE_SETUP.md)**.
+Full install: **[IDE_SETUP.md](IDE_SETUP.md)**.
 
-### Возможности
+### Features
 
-- Редактор `.alg`: подсветка, автодополнение и шаблоны Ctrl+Space (RU и EN: `алг…` / `proc…`, `если…` / `if…` …).
-- **ALG → Run** (Ctrl+Alt+R) — выполнить через `main.py`.
-- **ALG → Check** (Ctrl+Alt+C) — `main.py --check` (lex + parse + семантика).
-- **ALG → Step Debug** (Ctrl+Alt+Shift+D) — пошаговая отладка: breakpoints на линейке + `--debug-protocol` / SHAYDBG ([спека](docs/SHAYDBG.md)).
-- **ALG → Run Last** (Ctrl+Alt+L).
-- Мастер **ALG Project** / New Hello — образцы `Hello.alg` (RU) и `Hello_en.alg` (EN).
-- Перспектива **ALG**, маркеры в Problems (подсказки по-русски), консоль с гиперссылками на строки.
-- **Welcome** при первом запуске; **Учебный трек…** → `examples/track/`; **Грамматика…** → `GRAMMAR.md`.
-- Редактирование: Toggle Comment (`|`), Go to Matching Block, Quick Outline, Go to Declaration (F3), Find References, Rename, Reindent и др.
-- **Preferences → ALG:** Toolchain home, Extra args, Python, отступ, Check on save, **Validate…**, повтор Welcome.
+- Editor: highlighting, content assist, templates (RU + EN).
+- **ALG → Run** (Ctrl+Alt+R), **Check** (Ctrl+Alt+C), **Transpile** (Ctrl+Alt+T), **Step Debug** (Ctrl+Alt+Shift+D), **Run Last** (Ctrl+Alt+L).
+- ALG Project / Hello wizards (`Hello.alg` + `Hello_en.alg`).
+- Perspective **ALG**, Problems markers, console hyperlinks.
+- Welcome; Track / Grammar actions; Preferences → ALG (toolchain, Python, Validate…).
 
-Один движок: расширение `.alg` → `schoolalgol-shaya/interpreters/SchoolAlgol/main.py`. CLI Debug скрыт; для выполнения — Run, для шагов — Step Debug.
-
-### Установка (кратко)
-
-1. В Eclipse `dropins` положить JAR: `org.myau.shaya.ide_0.6.7.jar`.
-2. Рядом — toolchain `dropins/schoolalgol-shaya/` (`tools/shaya-run.bat`, `interpreters/SchoolAlgol/*.py`).
-3. Синхронизация из корня репозитория:
+### Install (short)
 
 ```powershell
 cd F:\proj\SCHOOLALGOL
 .\install_dropins.ps1
 .\install_dropins.ps1 -PluginJar
-.\install_dropins.ps1 -Examples   # учебный трек + примеры
+.\install_dropins.ps1 -Examples
 ```
 
-4. Перезапустить Eclipse. При необходимости: **Preferences → ALG → Toolchain home** = путь к `schoolalgol-shaya`, **Validate…**.
-
-Старые JAR `0.6.1`…`0.6.6` из dropins удалять (если файл «занят» — закройте Eclipse и удалите вручную). Разработка из исходников: PDE → Import `org.myau.shaya.ide` → Run As → Eclipse Application.
-
-### Использование
-
-1. **Window → Perspective → Open Perspective → ALG**.
-2. **File → New → Project → ALG Project** или открыть свой `.alg`.
-3. **ALG → Run** / **Check** / поставить breakpoint и **Step Debug**.
-4. При необходимости указать **Preferences → ALG → Python** (полный путь к `python.exe`).
+Restart Eclipse. Keep only `org.myau.shaya.ide_0.6.11.jar` in dropins (remove older jars after closing Eclipse if locked).
 
 ---
 
-## Быстрый старт
-
-### Python (движок)
-
-Требования: **Python 3.7+** (только стандартная библиотека). Для сборки `.c` — **GCC** (или другой C-компилятор).
+## Quick start
 
 ```bash
 python main.py examples/en/01_hello.alg
 python main.py program.alg --check
 python main.py program.alg --transpile
-python main.py --repl --lang ru
+python main.py --repl --lang en
+python main.py --repl-persist --lang en
 python main.py --version
+python launcher.py   # program.alg → interpret + C + gcc + exe
 ```
 
-Полный цикл для `program.alg` (interpret → C → gcc → exe):
-
-```bash
-python launcher.py
-```
-
-### Eclipse (плагин)
-
-См. раздел выше и **[IDE_SETUP.md](IDE_SETUP.md)**. После dropins + `install_dropins.ps1` — перспектива ALG и Run.
+Requires **Python 3.7+** (stdlib only). Optional **GCC** for `.c` builds.
 
 ---
 
-## Примеры
+## Examples
 
-| Путь | Тема |
-|------|------|
-| `examples/01_hello.alg` … `05_arrays.alg`, `07_strings.alg` | базовые уроки (RU) |
-| `examples/06_files.alg` | файловый I/O |
-| `examples/09_records.alg` | записи |
-| `examples/10_module.alg` | модули |
-| `examples/en/*.alg` | те же темы на английских ключевых словах |
-| `examples/track/README.md` | учебный трек (оглавление) |
-| `program.alg` + `utils.alg` | сводная демо-программа |
+| Path | Topic |
+|------|--------|
+| `examples/01_hello.alg` … `08_control_flow.alg` … | RU lessons |
+| `examples/en/*.alg` | Same topics, English keywords |
+| `examples/track/README.md` / `README.ru.md` | Teaching track index |
+| `program.alg` + `utils.alg` | Demo + module |
 
 ---
 
-## Тестирование
+## Testing
 
 ```bash
+pip install -r requirements-dev.txt   # pytest
 python -m pytest -q
 ```
 
-`pytest.ini` ограничивает сбор тестов корнем репозитория (`Gemini_reference/` исключён).
+GCC-backed cases skip when `gcc` is missing. CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (Windows + Ubuntu).
 
-| Файл | Фокус |
+| File | Focus |
 |------|--------|
-| `test_basic.py` | лексер, парсер, интерпретатор, модули, GCC |
-| `test_bilingual.py` | RU/EN синонимы |
-| `test_audit_2026.py` | CRLF, void, break, builtins, SHAYDBG step\* |
-| `test_backlog_2026.py` | да/нет, шаг, return, continue, C-прототипы |
-| `test_modules_arrays_2026.py` | `module_loader`, `размер(таб)` в C |
-
-При наличии `gcc` в PATH часть тестов проверяет паритет интерпретатор ↔ exe. Зависимости рантайма: `requirements.txt` (stdlib only).
+| `test_basic.py` | core + GCC |
+| `test_bilingual.py` | RU/EN synonyms |
+| `test_audit_2026.py` / `test_backlog_2026.py` / `test_modules_arrays_2026.py` | 2026 audit & backlog |
 
 ---
 
-## Связанные заметки
+## License
 
-- Файловые пути в `открыть` и `использовать` **не фильтруются** (без sandbox) — ответственность автора программы и преподавателя.
-- План аудита 2026 и его закрытие — [TODO_2026.md](TODO_2026.md); ранний аудит прототипа — [AUDIT.md](AUDIT.md). Актуальные версии — таблица в начале README и `version.py`.
+**MIT** — see [LICENSE](LICENSE). Version bumps: [VERSIONING.md](VERSIONING.md).
+
+---
+
+## Notes
+
+- Paths in `открыть` / `использовать` are **not** sandboxed.
+- Active work: **[TODO.md](TODO.md)**. Closed audit: [TODO_2026.md](TODO_2026.md).
+- After updating the plug-in JAR: close Eclipse, then remove locked old `org.myau.shaya.ide_*.jar` from dropins (or re-run `install_dropins.ps1 -PluginJar`).

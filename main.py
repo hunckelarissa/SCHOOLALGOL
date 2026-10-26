@@ -8,6 +8,7 @@ from alg_warnings import WarningCollector
 from ast_dump import dump_ast_json, dump_ast_text
 from diagnostics import count_ast_nodes, log_verbose
 from errors import InterpreterError, format_error
+from i18n import set_lang, t
 from lexer import Lexer
 from parser import Parser
 from interpreter import Interpreter
@@ -18,25 +19,26 @@ from version import __version__
 
 
 def _print_usage() -> None:
-    print(f"Интерпретатор/транспилятор языка .alg, версия {__version__}")
-    print("Использование: python main.py <путь_к_файлу.alg> [опции]")
-    print("               python main.py --repl [опции]")
-    print("  --run                   выполнение программы (по умолчанию)")
-    print("  --transpile             вывести C-код в файл <имя>.c вместо выполнения")
-    print("  --check                 лексика + синтаксис + семантика (без выполнения)")
-    print("  --dump-ast              вывести дерево разбора (AST) вместо выполнения")
-    print("  --dump-ast-format F     формат AST: text (по умолчанию) или json")
-    print("  --repl                  интерактивный режим")
-    print("  --lang ru|en            язык ключевых слов в REPL (по умолчанию ru)")
-    print("  --verbose               этапы пайплайна и предупреждения в stderr")
-    print("  --warnings-as-errors    предупреждения → код выхода 3")
-    print("  --trace                 пошаговая трассировка операторов (stderr)")
-    print("  --permissive            при --transpile: неизвестные узлы → предупреждение")
-    print("  --keep-cyrillic         при --transpile: кириллица в идентификаторах C")
-    print("  --debug-protocol        SHAYDBG JSONL для Eclipse Step Debug")
-    print("  --break N               точка останова (номер строки; можно повторять)")
-    print("  --version, -v           показать версию")
-    print("  --help, -h              эта справка")
+    print(t("usage_title", version=__version__))
+    print(t("usage_line1"))
+    print(t("usage_line2"))
+    print(t("opt_run"))
+    print(t("opt_transpile"))
+    print(t("opt_check"))
+    print(t("opt_dump_ast"))
+    print(t("opt_dump_fmt"))
+    print(t("opt_repl"))
+    print(t("opt_repl_persist"))
+    print(t("opt_lang"))
+    print(t("opt_verbose"))
+    print(t("opt_wae"))
+    print(t("opt_trace"))
+    print(t("opt_perm"))
+    print(t("opt_cyr"))
+    print(t("opt_dbg"))
+    print(t("opt_break"))
+    print(t("opt_ver"))
+    print(t("opt_help"))
 
 
 def main() -> None:
@@ -45,11 +47,25 @@ def main() -> None:
         _print_usage()
         sys.exit(2)
 
-    if argv[0] in ("--version", "-v"):
-        print(__version__)
-        sys.exit(0)
-    if argv[0] in ("--help", "-h"):
+    # Early --lang so help/errors use the requested language
+    for i, arg in enumerate(argv):
+        if arg == "--lang" and i + 1 < len(argv) and argv[i + 1] in ("ru", "en"):
+            set_lang(argv[i + 1])
+            break
+        if arg.startswith("--lang=") and arg.split("=", 1)[1] in ("ru", "en"):
+            set_lang(arg.split("=", 1)[1])
+            break
+    else:
+        set_lang(None)  # detect from env / default ru
+
+    # Allow `--lang en --help` / `--lang ru --version` (not only as argv[0])
+    if "--help" in argv or "-h" in argv:
         _print_usage()
+        sys.exit(0)
+    if ("--version" in argv or "-v" in argv) and not any(
+        a.endswith(".alg") for a in argv
+    ) and "--repl" not in argv:
+        print(__version__)
         sys.exit(0)
 
     transpile_mode = False
@@ -57,6 +73,7 @@ def main() -> None:
     dump_ast = False
     dump_ast_format = "text"
     repl_mode = False
+    repl_persist = False
     debug_protocol = False
     verbose = False
     warnings_as_errors = False
@@ -71,7 +88,7 @@ def main() -> None:
     while i < len(argv):
         arg = argv[i]
         if arg == "--run":
-            pass  # Выполнение по умолчанию
+            pass  # default execution
         elif arg == "--transpile":
             transpile_mode = True
         elif arg == "--check":
@@ -81,27 +98,32 @@ def main() -> None:
         elif arg == "--dump-ast-format":
             i += 1
             if i >= len(argv) or argv[i] not in ("text", "json"):
-                print("Ошибка: --dump-ast-format требует text или json", file=sys.stderr)
+                print(t("err_dump_fmt"), file=sys.stderr)
                 sys.exit(2)
             dump_ast_format = argv[i]
         elif arg.startswith("--dump-ast-format="):
             dump_ast_format = arg.split("=", 1)[1]
             if dump_ast_format not in ("text", "json"):
-                print("Ошибка: --dump-ast-format требует text или json", file=sys.stderr)
+                print(t("err_dump_fmt"), file=sys.stderr)
                 sys.exit(2)
         elif arg == "--repl":
+            repl_mode = True
+        elif arg == "--repl-persist":
+            repl_persist = True
             repl_mode = True
         elif arg == "--lang":
             i += 1
             if i >= len(argv) or argv[i] not in ("ru", "en"):
-                print("Ошибка: --lang требует ru или en", file=sys.stderr)
+                print(t("err_lang"), file=sys.stderr)
                 sys.exit(2)
             repl_lang = argv[i]
+            set_lang(repl_lang)
         elif arg.startswith("--lang="):
             repl_lang = arg.split("=", 1)[1]
             if repl_lang not in ("ru", "en"):
-                print("Ошибка: --lang требует ru или en", file=sys.stderr)
+                print(t("err_lang"), file=sys.stderr)
                 sys.exit(2)
+            set_lang(repl_lang)
         elif arg == "--verbose":
             verbose = True
         elif arg == "--warnings-as-errors":
@@ -117,26 +139,26 @@ def main() -> None:
         elif arg == "--break":
             i += 1
             if i >= len(argv):
-                print("Ошибка: --break требует номер строки", file=sys.stderr)
+                print(t("err_break"), file=sys.stderr)
                 sys.exit(2)
             try:
                 break_lines.append(int(argv[i]))
             except ValueError:
-                print(f"Ошибка: неверный номер строки для --break: {argv[i]!r}", file=sys.stderr)
+                print(t("err_break_bad", value=argv[i]), file=sys.stderr)
                 sys.exit(2)
         elif arg.startswith("--break="):
             try:
                 break_lines.append(int(arg.split("=", 1)[1]))
             except ValueError:
-                print(f"Ошибка: неверный номер строки для --break: {arg!r}", file=sys.stderr)
+                print(t("err_break_bad", value=arg), file=sys.stderr)
                 sys.exit(2)
         elif arg.startswith("-"):
-            print(f"Ошибка: неизвестный аргумент «{arg}»", file=sys.stderr)
+            print(t("err_unknown_arg", arg=arg), file=sys.stderr)
             _print_usage()
             sys.exit(2)
         else:
             if source_file is not None:
-                print(f"Ошибка: лишний аргумент «{arg}»", file=sys.stderr)
+                print(t("err_extra_arg", arg=arg), file=sys.stderr)
                 _print_usage()
                 sys.exit(2)
             source_file = arg
@@ -144,38 +166,41 @@ def main() -> None:
 
     if repl_mode:
         if source_file or transpile_mode or dump_ast or debug_protocol or check_mode:
-            print(
-                "Ошибка: --repl несовместим с файлом, --transpile, --dump-ast, "
-                "--check и --debug-protocol",
-                file=sys.stderr,
-            )
+            print(t("err_repl_incompat"), file=sys.stderr)
             sys.exit(2)
         from repl import run_repl
 
-        sys.exit(run_repl(verbose=verbose, trace=trace, lang=repl_lang))
+        sys.exit(
+            run_repl(
+                verbose=verbose,
+                trace=trace,
+                lang=repl_lang,
+                persist=repl_persist,
+            )
+        )
 
     if not source_file:
         _print_usage()
         sys.exit(2)
 
     if check_mode and (transpile_mode or debug_protocol):
-        print("Ошибка: --check несовместим с --transpile и --debug-protocol", file=sys.stderr)
+        print(t("err_check_incompat"), file=sys.stderr)
         sys.exit(2)
     if transpile_mode and debug_protocol:
-        print("Ошибка: --transpile несовместим с --debug-protocol", file=sys.stderr)
+        print(t("err_tr_dbg"), file=sys.stderr)
         sys.exit(2)
     if dump_ast and (transpile_mode or debug_protocol):
-        print("Ошибка: --dump-ast несовместим с --transpile и --debug-protocol", file=sys.stderr)
+        print(t("err_dump_incompat"), file=sys.stderr)
         sys.exit(2)
 
     try:
         with open(source_file, "r", encoding="utf-8") as f:
             source_code = f.read()
     except FileNotFoundError:
-        print(f"Ошибка: файл не найден «{source_file}»", file=sys.stderr)
+        print(t("err_file_not_found", path=source_file), file=sys.stderr)
         sys.exit(1)
     except OSError as e:
-        print(f"Ошибка чтения файла «{source_file}»: {e}", file=sys.stderr)
+        print(t("err_file_read", path=source_file, error=e), file=sys.stderr)
         sys.exit(1)
 
     quiet = bool(debug_protocol)
@@ -227,11 +252,11 @@ def main() -> None:
             sys.exit(warnings.finalize())
 
         if check_mode:
-            print(f"OK: синтаксис и семантика в порядке ({source_file})")
+            print(t("ok_check", path=source_file))
             sys.exit(warnings.finalize())
         elif transpile_mode:
             log_verbose(show_verbose, "этап", "Транспиляция в C…")
-            print(f"--- Транспиляция в C (версия {__version__}) ---")
+            print(t("banner_transpile", version=__version__))
             transpiler = CTranspiler(
                 ast_tree,
                 source_file,
@@ -245,13 +270,13 @@ def main() -> None:
             output_file = source_file.replace(".alg", ".c")
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(c_code)
-            print(f"Код сохранен в файл: {output_file}")
+            print(t("saved_c", path=output_file))
             print("------------------------")
             log_verbose(show_verbose, "этап", f"Записано {len(c_code)} символов C-кода")
         else:
             log_verbose(show_verbose, "этап", "Интерпретация…")
             if not quiet:
-                print(f"--- Вывод программы (версия {__version__}) ---")
+                print(t("banner_run", version=__version__))
             interpreter = Interpreter(
                 ast_tree,
                 source_file,
@@ -275,7 +300,10 @@ def main() -> None:
         print(format_error(e, source_code), file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"Ошибка: {e}", file=sys.stderr)
+        from i18n import get_lang
+
+        prefix = "Error" if get_lang() == "en" else "Ошибка"
+        print(f"{prefix}: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 

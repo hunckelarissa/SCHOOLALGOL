@@ -8,7 +8,9 @@ import java.util.Locale;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.preference.IPreferenceStore;
+import org.eclipse.osgi.util.NLS;
 import org.myau.shaya.ide.Activator;
+import org.myau.shaya.ide.i18n.Messages;
 import org.myau.shaya.ide.prefs.ShayaPreferenceConstants;
 import org.osgi.framework.Bundle;
 
@@ -174,7 +176,14 @@ public final class ShayaToolchain {
 	}
 
 	/**
-	 * CLI Debug: SCHOOLALGOL has no separate --debug/--trace; Run is the execution path.
+	 * Transpile to C via {@code main.py --transpile}.
+	 */
+	public static boolean supportsTranspile(String engineId) {
+		return ENGINE_ALG.equals(engineId);
+	}
+
+	/**
+	 * Legacy CLI Debug: not supported (use Step Debug / SHAYDBG).
 	 */
 	public static boolean supportsDebug(String engineId) {
 		return false;
@@ -188,13 +197,11 @@ public final class ShayaToolchain {
 	}
 
 	public static String debugRefuseMessage(String engineId) {
-		String name = engineDisplayName(engineId);
-		return name + " — CLI Debug не поддерживается. Используйте Run / Check / Step Debug.";
+		return NLS.bind(Messages.Toolchain_debugRefuse, engineDisplayName(engineId));
 	}
 
 	public static String stepDebugRefuseMessage(String engineId) {
-		String name = engineDisplayName(engineId);
-		return name + " — Eclipse Step Debug (SHAYDBG) недоступен для этого движка.";
+		return NLS.bind(Messages.Toolchain_stepDebugRefuse, engineDisplayName(engineId));
 	}
 
 	/**
@@ -257,39 +264,32 @@ public final class ShayaToolchain {
 
 		File home = getToolchainHome();
 		if (home == null || !home.isDirectory()) {
-			sb.append("ОШИБКА  Toolchain home не найден\n");
-			sb.append("        Preferences → ALG → Toolchain home\n");
-			sb.append("        или установите dropins/").append(DROPINS_FOLDER).append("/\n");
-			sb.append("        Затем: .\\install_dropins.ps1\n");
+			sb.append(NLS.bind(Messages.Toolchain_validate_homeMissing, DROPINS_FOLDER));
 			ok = false;
 		} else {
-			sb.append("OK      Toolchain home: ").append(home.getAbsolutePath()).append('\n');
+			sb.append(NLS.bind(Messages.Toolchain_validate_homeOk, home.getAbsolutePath()));
 		}
 
 		File wrap = getRunWrapper();
 		if (wrap == null || !wrap.isFile()) {
-			sb.append("ОШИБКА  Нет tools/shaya-run.bat\n");
-			sb.append("        Скопируйте bat: .\\install_dropins.ps1\n");
+			sb.append(Messages.Toolchain_validate_wrapperMissing);
 			ok = false;
 		} else {
-			sb.append("OK      Обёртка: ").append(wrap.getAbsolutePath()).append('\n');
+			sb.append(NLS.bind(Messages.Toolchain_validate_wrapperOk, wrap.getAbsolutePath()));
 		}
 
 		if (home != null) {
 			File interp = new File(home, "interpreters");
 			if (!interp.isDirectory()) {
-				sb.append("ОШИБКА  Нет каталога interpreters/ в toolchain\n");
+				sb.append(Messages.Toolchain_validate_interpMissing);
 				ok = false;
 			} else {
 				File school = new File(interp, ENGINE_DIR);
 				File mainPy = new File(school, "main.py");
 				if (school.isDirectory() && mainPy.isFile()) {
-					sb.append("OK      Интерпретатор: interpreters/").append(ENGINE_DIR)
-							.append("/main.py\n");
+					sb.append(NLS.bind(Messages.Toolchain_validate_interpOk, ENGINE_DIR));
 				} else {
-					sb.append("ОШИБКА  Нет interpreters/").append(ENGINE_DIR)
-							.append("/main.py\n");
-					sb.append("        .\\install_dropins.ps1 синхронизирует *.py\n");
+					sb.append(NLS.bind(Messages.Toolchain_validate_mainMissing, ENGINE_DIR));
 					ok = false;
 				}
 			}
@@ -301,9 +301,7 @@ public final class ShayaToolchain {
 			ok = false;
 		}
 
-		sb.append(ok
-				? "\nToolchain готов. Можно Run / Check / Step Debug."
-				: "\nИсправьте пункты «ОШИБКА», затем Validate снова.");
+		sb.append(ok ? Messages.Toolchain_validate_ready : Messages.Toolchain_validate_fix);
 		return sb.toString();
 	}
 
@@ -314,9 +312,9 @@ public final class ShayaToolchain {
 		if (configured != null && !configured.isBlank()) {
 			File f = new File(configured.trim());
 			if (f.isFile()) {
-				return "OK      Python (prefs): " + f.getAbsolutePath();
+				return NLS.bind(Messages.Toolchain_validate_pythonPrefsOk, f.getAbsolutePath());
 			}
-			return "ОШИБКА  Путь Python в prefs не файл: " + configured.trim();
+			return NLS.bind(Messages.Toolchain_validate_pythonPrefsBad, configured.trim());
 		}
 		String[] candidates = { "py", "python", "python3" };
 		for (String cmd : candidates) {
@@ -331,11 +329,11 @@ public final class ShayaToolchain {
 				int rc = p.waitFor();
 				if (rc == 0 && !out.isBlank()) {
 					String first = out.lines().findFirst().orElse(out);
-					return "OK      Python (PATH/" + cmd + "): " + first;
+					return NLS.bind(Messages.Toolchain_validate_pythonPathOk, cmd, first);
 				}
 			} catch (Exception ignored) {
 			}
 		}
-		return "ОШИБКА  Python 3 не найден (Preferences → ALG → Python, или PATH / py -3)";
+		return Messages.Toolchain_validate_pythonNotFound;
 	}
 }

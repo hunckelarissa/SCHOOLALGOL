@@ -1,8 +1,8 @@
 # Технический аудит прототипа (исторический)
 
 > **Актуальность:** закрытый документ по аудиту раннего прототипа.  
-> **Текущие версии:** движок **1.2.1**, плагин ALG **0.6.7** — [README.md](README.md), [GRAMMAR.md](GRAMMAR.md), [IDE_SETUP.md](IDE_SETUP.md).  
-> **Аудит 2026 и бэклог:** [TODO_2026.md](TODO_2026.md) (выполнен). Бренд репозитория — **SCHOOLALGOL** / **ALG**.
+> **Текущие версии:** движок **1.2.1**, плагин ALG **0.6.9** — [README.md](README.md) (EN) / [README.ru.md](README.ru.md) (RU), [GRAMMAR.md](GRAMMAR.md), [IDE_SETUP.md](IDE_SETUP.md).  
+> **Закрытый аудит 2026:** [TODO_2026.md](TODO_2026.md). **Актуальный план:** [TODO.md](TODO.md). Бренд — **SCHOOLALGOL** / **ALG**.
 
 ## 1. Executive summary
 

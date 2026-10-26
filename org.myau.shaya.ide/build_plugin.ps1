@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 $PluginRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $PluginRoot
-$Ver = "0.6.7"
+$Ver = "0.6.11"
 $Build = Join-Path $PluginRoot "build"
 $Classes = Join-Path $Build "classes"
 $Stage = Join-Path $Build "stage"
@@ -117,9 +117,12 @@ Write-Host "MANIFEST Bundle-Version -> $Ver"
 $javaFiles = Get-ChildItem -LiteralPath $SrcRoot -Filter "*.java" -Recurse -File
 if (-not $javaFiles) { throw "No .java under $SrcRoot" }
 
-if (Test-Path -LiteralPath $Classes) { Remove-Item -LiteralPath $Classes -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $Classes | Out-Null
+# F2: wipe build tree (stale META-INF / old JARs / classes) — only build_plugin regenerates it
+if (Test-Path -LiteralPath $Build) {
+    Remove-Item -LiteralPath $Build -Recurse -Force
+}
 New-Item -ItemType Directory -Force -Path $Build | Out-Null
+New-Item -ItemType Directory -Force -Path $Classes | Out-Null
 
 $sourcesTxt = Join-Path $Build "sources.txt"
 [System.IO.File]::WriteAllLines($sourcesTxt, @($javaFiles.FullName), $utf8NoBom)
@@ -134,6 +137,12 @@ if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -F
 New-Item -ItemType Directory -Force -Path (Join-Path $Stage "META-INF") | Out-Null
 Copy-Item -LiteralPath $mfSrc -Destination (Join-Path $Stage "META-INF\MANIFEST.MF") -Force
 Copy-Item -LiteralPath (Join-Path $PluginRoot "plugin.xml") -Destination (Join-Path $Stage "plugin.xml") -Force
+foreach ($rootProp in @("plugin.properties", "plugin_ru.properties")) {
+    $rp = Join-Path $PluginRoot $rootProp
+    if (Test-Path -LiteralPath $rp) {
+        Copy-Item -LiteralPath $rp -Destination (Join-Path $Stage $rootProp) -Force
+    }
+}
 # Copy compiled classes (LiteralPath + "*" does NOT expand wildcards)
 $orgPkg = Join-Path $Classes "org"
 if (-not (Test-Path -LiteralPath $orgPkg)) {
@@ -145,6 +154,19 @@ Write-Host "Staged $classCount .class files"
 if ($classCount -lt 50) {
     throw "Too few class files in stage ($classCount); aborting jar"
 }
+
+# NLS / resource *.properties next to compiled classes (same package path as src)
+$propFiles = @(Get-ChildItem -LiteralPath $SrcRoot -Filter "*.properties" -Recurse -File)
+foreach ($pf in $propFiles) {
+    $rel = $pf.FullName.Substring($SrcRoot.Length).TrimStart('\', '/')
+    $dest = Join-Path $Stage $rel
+    $destDir = Split-Path -Parent $dest
+    if (-not (Test-Path -LiteralPath $destDir)) {
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    }
+    Copy-Item -LiteralPath $pf.FullName -Destination $dest -Force
+}
+Write-Host "Staged $($propFiles.Count) .properties file(s)"
 
 # Optional icons / other resources under plugin root
 foreach ($extra in @("icons", "OSGI-INF")) {
@@ -168,6 +190,17 @@ try {
 
 # Also copy to repo root for install_dropins convenience
 Copy-Item -LiteralPath $jarOut -Destination (Join-Path $RepoRoot $jarName) -Force
+
+# Drop other versioned JARs from build/ and repo root (keep only current $Ver)
+foreach ($dir in @($Build, $RepoRoot)) {
+    Get-ChildItem -LiteralPath $dir -Filter "org.myau.shaya.ide_*.jar" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne $jarName } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force
+            Write-Host "Removed stale JAR: $($_.Name)"
+        }
+}
+
 Write-Host "Built: $jarOut"
 Write-Host "Copied: $(Join-Path $RepoRoot $jarName)"
-Write-Host "Next: .\install_dropins.ps1 -PluginJar   (after bumping `$PluginVer to $Ver)"
+Write-Host "Next: .\install_dropins.ps1 -PluginJar   (ensure `$PluginVer is $Ver)"

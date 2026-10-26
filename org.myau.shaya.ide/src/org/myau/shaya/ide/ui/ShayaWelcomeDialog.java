@@ -15,6 +15,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.wizards.IWizardDescriptor;
 import org.eclipse.ui.IWorkbenchWizard;
+import org.myau.shaya.ide.i18n.Messages;
 
 /**
  * Welcome — first-step CTAs for ALG / SCHOOLALGOL.
@@ -35,7 +36,7 @@ public class ShayaWelcomeDialog extends Dialog {
 	@Override
 	protected void configureShell(Shell newShell) {
 		super.configureShell(newShell);
-		newShell.setText("Welcome — ALG");
+		newShell.setText(Messages.Welcome_shellTitle);
 	}
 
 	@Override
@@ -45,25 +46,23 @@ public class ShayaWelcomeDialog extends Dialog {
 
 		Label title = new Label(area, SWT.WRAP | SWT.CENTER);
 		title.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-		title.setText("ALG / SCHOOLALGOL");
+		title.setText(Messages.Welcome_brand);
 
 		Label tip = new Label(area, SWT.WRAP | SWT.CENTER);
 		GridData gdTip = new GridData(SWT.FILL, SWT.CENTER, true, false);
 		gdTip.widthHint = 360;
 		gdTip.verticalIndent = 10;
 		tip.setLayoutData(gdTip);
-		tip.setText("Файлы .alg → интерпретатор SCHOOLALGOL (School Algol).\n"
-				+ "Начните с проекта, Hello.alg или шпаргалки клавиш.\n"
-				+ "Отладка: Step Debug (Ctrl+Alt+Shift+D), не CLI Debug.");
+		tip.setText(Messages.Welcome_tip);
 
 		return area;
 	}
 
 	@Override
 	protected void createButtonsForButtonBar(Composite parent) {
-		createButton(parent, ID_NEW_PROJECT, "Новый проект…", true);
-		createButton(parent, ID_IMPORT_TRACK, "Учебный трек…", false);
-		createButton(parent, ID_SHORTCUTS, "Клавиши…", false);
+		createButton(parent, ID_NEW_PROJECT, Messages.Welcome_newProject, true);
+		createButton(parent, ID_IMPORT_TRACK, Messages.Welcome_importTrack, false);
+		createButton(parent, ID_SHORTCUTS, Messages.Welcome_shortcuts, false);
 		createButton(parent, IDialogConstants.CLOSE_ID, IDialogConstants.CLOSE_LABEL, false);
 	}
 
@@ -96,7 +95,7 @@ public class ShayaWelcomeDialog extends Dialog {
 				new ShayaShortcutsDialog(shell).open();
 			}
 		} catch (Exception e) {
-			org.eclipse.jface.dialogs.MessageDialog.openError(shell, "Welcome",
+			org.eclipse.jface.dialogs.MessageDialog.openError(shell, Messages.Welcome_errorTitle,
 					e.getMessage() != null ? e.getMessage() : String.valueOf(e));
 		}
 	}
@@ -105,8 +104,8 @@ public class ShayaWelcomeDialog extends Dialog {
 		IWizardDescriptor desc = PlatformUI.getWorkbench().getNewWizardRegistry()
 				.findWizard("org.myau.shaya.ide.wizards.newProject");
 		if (desc == null) {
-			org.eclipse.jface.dialogs.MessageDialog.openInformation(shell, "Welcome",
-					"ALG Project wizard not found.\nUse File → New → Project → ALG.");
+			org.eclipse.jface.dialogs.MessageDialog.openInformation(shell, Messages.Welcome_errorTitle,
+					Messages.Welcome_wizardMissing);
 			return;
 		}
 		IWorkbenchWizard wizard = desc.createWizard();

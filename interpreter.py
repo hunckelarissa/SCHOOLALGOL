@@ -5,7 +5,7 @@ import os
 from errors import InterpreterError, SemanticError
 from lang_tokens import TokenType
 from ast_nodes import *
-from constants import MAIN_PROGRAM_NAMES, main_program_label
+from constants import MAIN_PROGRAM_NAMES, is_main_program, main_program_label
 from module_loader import (
     CyclicImportError,
     ModuleFileNotFoundError,
@@ -19,6 +19,7 @@ from alg_warnings import (
     RedefinitionWarning,
     WarningCollector,
 )
+from i18n import sem
 import alg_builtins
 
 # --- Вспомогательные классы для представления данных в памяти ---
@@ -47,16 +48,36 @@ class EnumMember:
 
 class RecordInstance:
     """Представление экземпляра записи в памяти."""
+
+    @staticmethod
+    def _literal_int(node, default=1):
+        """Границы таб в записи: только числовые литералы (B3)."""
+        if isinstance(node, Num):
+            try:
+                return int(node.value)
+            except (TypeError, ValueError):
+                return default
+        return default
+
     def __init__(self, record_decl):
         self.record_decl = record_decl
         self.fields = {}
-        # Инициализируем поля значениями по умолчанию
         for field_decl in record_decl.fields:
             if isinstance(field_decl, VarDecl):
-                self.fields[field_decl.var_node.name] = None
+                self.fields[field_decl.var_node.name.lower()] = None
             elif isinstance(field_decl, ArrayDecl):
-                 self.fields[field_decl.var_node.name] = None
-                 
+                name = field_decl.var_node.name.lower()
+                start = self._literal_int(field_decl.start_idx, 1)
+                end = self._literal_int(field_decl.end_idx, start)
+                if start > end:
+                    start, end = end, start
+                size = end - start + 1
+                self.fields[name] = {
+                    "_type": "array",
+                    "offset": start,
+                    "values": [None] * size,
+                }
+
 class ActivationRecord:
     """Запись активации (стековый кадр), хранит локальные переменные для одного вызова."""
     def __init__(self, name, type, members=None, types=None):
@@ -93,12 +114,15 @@ class Interpreter(NodeVisitor):
         debug_protocol=False,
         break_lines=None,
         source_lines=None,
+        repl_session=None,
     ):
         self.tree = tree
         self.main_filepath = main_filepath
         self.verbose = verbose and not debug_protocol
         self.trace = trace and not debug_protocol
         self.warnings = warnings if warnings is not None else WarningCollector()
+        # Optional REPL session: object with .members / .types dicts (C2).
+        self.repl_session = repl_session
         self.call_stack = []
         self._modules = ModuleLoadTracker()
         self._built_ins = {
@@ -242,14 +266,51 @@ class Interpreter(NodeVisitor):
                 out[k] = v
         return out
 
+    def _debug_json_value(self, value):
+        """Value shape suitable for SHAYDBG JSON (arrays/records expanded)."""
+        if isinstance(value, EnumMember):
+            return f"{value.type_name}.{value.member_name}"
+        if isinstance(value, RecordInstance):
+            return {fk: self._debug_json_value(fv) for fk, fv in value.fields.items()}
+        if isinstance(value, dict) and value.get("_type") == "array":
+            return {
+                "offset": value.get("offset", 1),
+                "values": [self._debug_json_value(v) for v in (value.get("values") or [])],
+            }
+        if isinstance(value, dict):
+            # словарь ALG or other maps
+            return {str(k): self._debug_json_value(v) for k, v in list(value.items())[:80]}
+        return value
+
+    def _split_plain_for_debug(self, plain: dict):
+        scalars, arrays, records = {}, {}, {}
+        for k, v in plain.items():
+            if isinstance(v, dict) and v.get("_type") == "array":
+                arrays[k] = self._debug_json_value(v)
+            elif isinstance(v, RecordInstance):
+                records[k] = self._debug_json_value(v)
+            else:
+                scalars[k] = self._debug_json_value(v)
+        return scalars, arrays, records
+
     def _snapshot_vars(self):
-        gmap, lmap = {}, {}
-        if not self.call_stack:
-            return gmap, lmap
-        gmap = self._ar_plain(self.call_stack[0])
-        if len(self.call_stack) > 1:
-            lmap = self._ar_plain(self.call_stack[-1])
+        """Scalars only (arrays/records go to dedicated maps via `_snapshot_debug_state`)."""
+        gmap, lmap, _, _ = self._snapshot_debug_state()
         return gmap, lmap
+
+    def _snapshot_debug_state(self):
+        """globals/locals scalars + arrays + records for SHAYDBG `stopped` / `vars`."""
+        gmap, lmap, arrays, records = {}, {}, {}, {}
+        if not self.call_stack:
+            return gmap, lmap, arrays, records
+        g_s, g_a, g_r = self._split_plain_for_debug(self._ar_plain(self.call_stack[0]))
+        gmap, arrays, records = g_s, g_a, g_r
+        if len(self.call_stack) > 1:
+            l_s, l_a, l_r = self._split_plain_for_debug(self._ar_plain(self.call_stack[-1]))
+            lmap = l_s
+            arrays = {**arrays, **l_a}
+            records = {**records, **l_r}
+        return gmap, lmap, arrays, records
 
     def _protocol_source_line(self, line: int, path: str = "") -> str:
         key = self._norm_path(path) if path else self._norm_path(self._program_path)
@@ -276,28 +337,31 @@ class Interpreter(NodeVisitor):
         return frames
 
     def debug_evaluate(self, expression: str):
+        """
+        Evaluate a small ALG expression while suspended (SHAYDBG eval).
+        Supports: literals, names, member access, indexing, unary/binary ops
+        (via parser ``logical_or_expr``). Not: assignments, statements, calls
+        that need full program context beyond builtins.
+        """
         try:
             name = (expression or "").strip()
             if not name:
                 return None
-            if name.startswith('"') and name.endswith('"') and len(name) >= 2:
-                return name[1:-1]
-            if name in ("да", "нет", "истина", "ложь"):
-                return name in ("да", "истина")
-            try:
-                if "." in name:
-                    return float(name)
-                return int(name)
-            except ValueError:
-                pass
-            key = name.lower()
-            for ar in reversed(self.call_stack):
-                if ar.has(key):
-                    val = ar.get(key)
-                    if isinstance(val, tuple) and val[0] in ("var", "const"):
-                        return val[1]
-                    return val
-            return f"Ошибка оценки: переменная '{name}' не определена"
+            from lexer import Lexer
+            from parser import Parser
+            from lang_tokens import TokenType as TT
+
+            tokens = list(Lexer(name).generate_tokens())
+            p = Parser(tokens)
+            node = p.logical_or_expr()
+            if p.current_token().type != TT.EOF:
+                return f"Ошибка оценки: лишний текст после выражения «{name}»"
+            val_tuple = self.visit(node)
+            if not isinstance(val_tuple, tuple) or len(val_tuple) < 2:
+                return val_tuple
+            if val_tuple[0] == "void":
+                return "Ошибка оценки: выражение не имеет значения"
+            return val_tuple[1]
         except Exception as e:
             return f"Ошибка оценки: {e}"
 
@@ -307,7 +371,7 @@ class Interpreter(NodeVisitor):
             if ar.has(key):
                 cur = ar.get(key)
                 if isinstance(cur, tuple) and cur[0] == "const":
-                    raise SemanticError(f"Нельзя изменять константу '{name}'", None, self.call_stack)
+                    raise SemanticError(sem("sem_const_assign", name=name), None, self.call_stack)
                 ar.set(key, ("var", value))
                 return value
         if self.call_stack:
@@ -331,6 +395,7 @@ class Interpreter(NodeVisitor):
             build_eval,
             build_set,
             build_stopped,
+            build_vars,
             cmd_name,
             emit_event,
             extract_break_lines,
@@ -342,7 +407,7 @@ class Interpreter(NodeVisitor):
         line = self._stmt_line_num(stmt)
         stmt_path = self._stmt_path(stmt)
         source = self._protocol_source_line(line, stmt_path) or type(stmt).__name__
-        gmap, lmap = self._snapshot_vars()
+        gmap, lmap, amap, rmap = self._snapshot_debug_state()
         emit_event(
             build_stopped(
                 reason=reason,
@@ -352,6 +417,8 @@ class Interpreter(NodeVisitor):
                 globals_map=gmap,
                 locals_map=lmap,
                 stack=self._protocol_stack(line, source, stmt_path),
+                arrays=amap,
+                records=rmap,
             )
         )
         print(
@@ -413,7 +480,13 @@ class Interpreter(NodeVisitor):
                     if isinstance(value, str) and value.startswith("Ошибка оценки:"):
                         emit_event(build_eval(expr=expr, value=None, ok=False, error=value))
                     else:
-                        emit_event(build_eval(expr=expr, value=value, ok=True))
+                        emit_event(
+                            build_eval(
+                                expr=expr,
+                                value=self._debug_json_value(value),
+                                ok=True,
+                            )
+                        )
                 except Exception as exc:
                     emit_event(build_eval(expr=expr, value=None, ok=False, error=str(exc)))
                 continue
@@ -426,9 +499,26 @@ class Interpreter(NodeVisitor):
                         emit_event(build_set(name=name, value=None, ok=False, error=value))
                     else:
                         self.debug_set_var(name, value)
-                        emit_event(build_set(name=name, value=value, ok=True))
+                        emit_event(
+                            build_set(
+                                name=name,
+                                value=self._debug_json_value(value),
+                                ok=True,
+                            )
+                        )
                 except Exception as exc:
                     emit_event(build_set(name=name, value=None, ok=False, error=str(exc)))
+                continue
+            if cmd == "vars":
+                vg, vl, va, vr = self._snapshot_debug_state()
+                emit_event(
+                    build_vars(
+                        globals_map=vg,
+                        locals_map=vl,
+                        arrays=va,
+                        records=vr,
+                    )
+                )
                 continue
 
     def _read_user_input(self, prompt: str = "") -> str:
@@ -468,7 +558,7 @@ class Interpreter(NodeVisitor):
         if type_storage.get(name):
             return ('type_name', type_storage.get(name))
 
-        raise SemanticError(f"Переменная, константа или тип '{name}' не определена", token, self.call_stack)
+        raise SemanticError(sem("sem_undefined", name=name), token, self.call_stack)
 
     def _get_var_type(self, var_name: str):
         var_name = var_name.lower()
@@ -488,7 +578,7 @@ class Interpreter(NodeVisitor):
         if isinstance(value, str):
             if declared in ("цел", "вещ", "лог"):
                 raise SemanticError(
-                    f"Нельзя присвоить строку переменной типа «{declared}» («{var_name}»)",
+                    sem("sem_assign_lit", left=declared),
                     token,
                     self.call_stack,
                 )
@@ -501,11 +591,11 @@ class Interpreter(NodeVisitor):
         
         # Переменные можно менять только в локальной области видимости
         if not ar.has(name):
-            raise SemanticError(f"Попытка присвоить значение необъявленной локальной переменной '{name}'", token, self.call_stack)
+            raise SemanticError(sem("sem_assign_undeclared", name=name), token, self.call_stack)
         
         current_val_tuple = ar.get(name)
         if isinstance(current_val_tuple, tuple) and current_val_tuple[0] == 'const':
-             raise SemanticError(f"Нельзя изменять значение константы '{name}'", token, self.call_stack)
+             raise SemanticError(sem("sem_const_assign", name=name), token, self.call_stack)
 
         ar.set(name, ('var', value))
 
@@ -558,9 +648,9 @@ class Interpreter(NodeVisitor):
                      )
                  type_storage[declaration.name] = declaration
             elif isinstance(declaration, ConstDecl):
-                 if scope.has(declaration.var_node.name): raise SemanticError(f"Переопределение константы '{declaration.var_node.name}'", declaration.var_node.token)
+                 if scope.has(declaration.var_node.name): raise SemanticError(sem("sem_const_redeclare", name=declaration.var_node.name), declaration.var_node.token)
                  value_tuple = self.visit(declaration.expr)
-                 if value_tuple[0] == 'void': raise SemanticError("Процедура не может быть присвоена константе", declaration.var_node.token, self.call_stack)
+                 if value_tuple[0] == 'void': raise SemanticError(sem("sem_void_const"), declaration.var_node.token, self.call_stack)
                  value = value_tuple[1] if isinstance(value_tuple, tuple) else value_tuple
                  scope.set(declaration.var_node.name, ('const', value))
             elif isinstance(declaration, VarDecl):
@@ -579,7 +669,7 @@ class Interpreter(NodeVisitor):
                 main_decl_tuple = global_scope.get(main_name)
                 break
         if not main_decl_tuple or not isinstance(main_decl_tuple[1], ProcDecl):
-            raise SemanticError(f"Не найдена главная программа «алг {main_program_label()}»")
+            raise SemanticError(sem("sem_no_main", label=main_program_label()))
         main_decl = main_decl_tuple[1]
         
         # Запускаем выполнение с вызова главной процедуры
@@ -596,10 +686,10 @@ class Interpreter(NodeVisitor):
     def visit_ConstDecl(self, node, scope=None):
         scope = scope if scope else self.call_stack[-1]
         if scope.has(node.var_node.name):
-            raise SemanticError(f"Переопределение константы '{node.var_node.name}'", node.var_node.token, self.call_stack)
+            raise SemanticError(sem("sem_const_redeclare", name=node.var_node.name), node.var_node.token, self.call_stack)
         value_tuple = self.visit(node.expr)
         if value_tuple[0] == 'void':
-             raise SemanticError("Процедура не может быть присвоена константе", node.var_node.token, self.call_stack)
+             raise SemanticError(sem("sem_void_const"), node.var_node.token, self.call_stack)
         value = value_tuple[1] if isinstance(value_tuple, tuple) else value_tuple
         scope.set(node.var_node.name, ('const', value))
     def visit_RecordDecl(self, node, scope): pass
@@ -638,11 +728,48 @@ class Interpreter(NodeVisitor):
         finally:
             self._modules.leave(module_path)
 
+    def _seed_repl_session(self, ar: ActivationRecord) -> None:
+        sess = self.repl_session
+        if sess is None:
+            return
+        for key, val in getattr(sess, "members", {}).items():
+            if not ar.has(key):
+                ar.set(key, val)
+                t = getattr(sess, "types", {}).get(key.lower() if isinstance(key, str) else key)
+                if t:
+                    ar.set_type(key, t)
+
+    def _harvest_repl_session(self, ar: ActivationRecord) -> None:
+        sess = self.repl_session
+        if sess is None:
+            return
+        members = {}
+        types = {}
+        for key, val in ar.members.items():
+            if key.startswith("_"):
+                continue
+            if isinstance(val, tuple) and val and val[0] == "sub":
+                continue
+            members[key] = val
+            t = ar.get_type(key)
+            if t:
+                types[key] = t
+        sess.members = members
+        sess.types = types
+
     def visit_VarDecl(self, node, scope=None):
         var_name = node.var_node.name
         type_node = node.type_node
         scope = scope if scope else self.call_stack[-1]
-        if scope.has(var_name): raise SemanticError(f"Повторное объявление переменной '{var_name}'", node.var_node.token, self.call_stack)
+        if scope.has(var_name):
+            if self.repl_session is not None:
+                # REPL persist: keep value, refresh declared type.
+                if isinstance(type_node, Type):
+                    scope.set_type(var_name, canonical_type(type_node.value))
+                elif isinstance(type_node, CustomType):
+                    scope.set_type(var_name, type_node.name)
+                return
+            raise SemanticError(sem("sem_redeclare", name=var_name), node.var_node.token, self.call_stack)
 
         if isinstance(type_node, Type):
             tname = canonical_type(type_node.value)
@@ -654,18 +781,21 @@ class Interpreter(NodeVisitor):
             scope.set_type(var_name, type_name)
             type_storage = self.call_stack[0].get('_types_')
             type_decl = type_storage.get(type_name)
-            if not type_decl: raise SemanticError(f"Неизвестный тип '{type_name}'", type_node.token, self.call_stack)
+            if not type_decl: raise SemanticError(sem("sem_unknown_type", name=type_name), type_node.token, self.call_stack)
             if isinstance(type_decl, RecordDecl): scope.set(var_name, ('var', RecordInstance(type_decl)))
             elif isinstance(type_decl, EnumDecl): scope.set(var_name, ('var', None))
 
     def visit_ArrayDecl(self, node, scope=None):
         var_name = node.var_node.name
         scope = scope if scope else self.call_stack[-1]
-        if scope.has(var_name): raise SemanticError(f"Повторное объявление массива '{var_name}'", node.var_node.token, self.call_stack)
+        if scope.has(var_name):
+            if self.repl_session is not None:
+                return
+            raise SemanticError(sem("sem_redeclare", name=var_name), node.var_node.token, self.call_stack)
         start_idx = self.visit(node.start_idx)[1]
         end_idx = self.visit(node.end_idx)[1]
         start_idx, end_idx = int(start_idx), int(end_idx)
-        if start_idx > end_idx: raise SemanticError(f"Начальный индекс массива {start_idx} больше конечного {end_idx}", node.var_node.token, self.call_stack)
+        if start_idx > end_idx: raise SemanticError(sem("sem_array_bounds_decl", start=start_idx, end=end_idx), node.var_node.token, self.call_stack)
         size = end_idx - start_idx + 1
         array_data = {'_type': 'array', 'offset': start_idx, 'values': [None] * size}
         elem_type = node.type_node.value if isinstance(node.type_node, Type) else '?'
@@ -674,7 +804,7 @@ class Interpreter(NodeVisitor):
 
     def visit_Assign(self, node):
         value_tuple = self.visit(node.right)
-        if value_tuple[0] == 'void': raise SemanticError("Процедура не возвращает значение", node.right.token if hasattr(node.right, 'token') else node.right.owner_expr.token, self.call_stack)
+        if value_tuple[0] == 'void': raise SemanticError(sem("sem_void_value"), node.right.token if hasattr(node.right, 'token') else node.right.owner_expr.token, self.call_stack)
         value_to_assign = value_tuple[1]
         
         left_side_tuple = self.visit(node.left, is_assign=True)
@@ -693,7 +823,7 @@ class Interpreter(NodeVisitor):
         elif var_type == 'field':
             record_instance, field_name = left_side_tuple[2], left_side_tuple[3]
             record_instance.fields[field_name] = value_to_assign
-        else: raise SemanticError("Нельзя присвоить значение этому выражению", node.left.token, self.call_stack)
+        else: raise SemanticError(sem("sem_bad_lvalue"), node.left.token, self.call_stack)
         if self.trace:
             self._trace_assign(node.left, value_to_assign)
 
@@ -711,7 +841,7 @@ class Interpreter(NodeVisitor):
             return ('builtin_val', val)
 
         sub_decl_tuple = self.call_stack[0].get(sub_name)
-        if not sub_decl_tuple or sub_decl_tuple[0] != 'sub': raise SemanticError(f"Процедура или функция '{sub_name}' не определена", node.token, self.call_stack)
+        if not sub_decl_tuple or sub_decl_tuple[0] != 'sub': raise SemanticError(sem("sem_sub_undefined", name=sub_name), node.token, self.call_stack)
         sub_decl = sub_decl_tuple[1]
         ar = ActivationRecord(sub_name, 'procedure' if isinstance(sub_decl, ProcDecl) else 'function')
         
@@ -719,10 +849,10 @@ class Interpreter(NodeVisitor):
         actual_params = []
         for p in node.actual_params:
             val_tuple = self.visit(p)
-            if val_tuple[0] == 'void': raise SemanticError("Процедура не возвращает значение и не может быть аргументом", node.token, self.call_stack)
+            if val_tuple[0] == 'void': raise SemanticError(sem("sem_void_arg"), node.token, self.call_stack)
             actual_params.append(val_tuple[1])
 
-        if len(actual_params) != len(sub_decl.params): raise SemanticError(f"Неверное количество аргументов для '{sub_name}'", node.token, self.call_stack)
+        if len(actual_params) != len(sub_decl.params): raise SemanticError(sem("sem_args_count", name=sub_name), node.token, self.call_stack)
         
         # Сначала инициализируем аргументы
         for formal_param, actual_param_val in zip(sub_decl.params, actual_params):
@@ -736,6 +866,9 @@ class Interpreter(NodeVisitor):
             elif isinstance(formal_param.type_node, CustomType):
                 ar.set_type(formal_param.var_node.name, formal_param.type_node.name)
             
+        if is_main_program(sub_name):
+            self._seed_repl_session(ar)
+
         # Затем обрабатываем декларации
         for declaration in sub_decl.block.declarations:
             self.visit(declaration, scope=ar)
@@ -747,7 +880,7 @@ class Interpreter(NodeVisitor):
                 ar.set_type(rv.var_node.name, rv.type_node.value)
             elif isinstance(rv.type_node, CustomType):
                 ar.set_type(rv.var_node.name, rv.type_node.name)
-        
+            
         self.call_stack.append(ar)
         try:
             for statement in sub_decl.block.statements:
@@ -762,6 +895,9 @@ class Interpreter(NodeVisitor):
             return_val = ar.get(sub_decl.return_var_decl.var_node.name)[1]
         else:
             tag = 'void'
+
+        if is_main_program(sub_name):
+            self._harvest_repl_session(ar)
 
         self.call_stack.pop()
         return (tag, return_val)
@@ -779,43 +915,43 @@ class Interpreter(NodeVisitor):
         owner_val = owner_tuple[1]
         if isinstance(owner_val, RecordInstance):
             field_name = node.member_token.value.lower()
-            if field_name not in owner_val.fields: raise SemanticError(f"У записи нет поля '{field_name}'", node.member_token, self.call_stack)
+            if field_name not in owner_val.fields: raise SemanticError(sem("sem_field_missing", name=field_name), node.member_token, self.call_stack)
             if is_assign: return ('field', owner_val.fields.get(field_name), owner_val, field_name)
             return ('var', owner_val.fields.get(field_name))
         
-        raise SemanticError(f"Невозможно получить доступ к члену", node.owner_expr.token, self.call_stack)
+        raise SemanticError(sem("sem_no_member"), node.owner_expr.token, self.call_stack)
     
     def visit_ArrayAccess(self, node, is_assign=False):
         coll_tuple = self.visit(node.owner_expr)
-        if coll_tuple[0] == 'void': raise SemanticError("Выражение не имеет значения (процедура?)", node.owner_expr.token, self.call_stack)
+        if coll_tuple[0] == 'void': raise SemanticError(sem("sem_void_expr"), node.owner_expr.token, self.call_stack)
         collection = coll_tuple[1]
         
         idx_tuple = self.visit(node.index_expr)
-        if idx_tuple[0] == 'void': raise SemanticError("Индекс не имеет значения", node.index_expr.token, self.call_stack)
+        if idx_tuple[0] == 'void': raise SemanticError(sem("sem_void_index"), node.index_expr.token, self.call_stack)
         index_or_key = idx_tuple[1]
         
         if isinstance(collection, dict) and collection.get('_type') == 'array':
-            if not isinstance(index_or_key, (int, float)): raise SemanticError("Индекс массива должен быть числом", node.index_expr.token, self.call_stack)
+            if not isinstance(index_or_key, (int, float)): raise SemanticError(sem("sem_array_index_num"), node.index_expr.token, self.call_stack)
             index, offset = int(index_or_key), collection['offset']
-            if not (offset <= index < offset + len(collection['values'])): raise SemanticError(f"Индекс {index} вне границ массива", node.index_expr.token, self.call_stack)
+            if not (offset <= index < offset + len(collection['values'])): raise SemanticError(sem("sem_index_bounds", index=index), node.index_expr.token, self.call_stack)
             real_idx = index - offset
             if is_assign: return ('array_val', collection['values'][real_idx], collection, real_idx)
             return ('var', collection['values'][real_idx])
         elif isinstance(collection, dict):
-            if not isinstance(index_or_key, str): raise SemanticError("Ключ для словаря должен быть строкой", node.index_expr.token, self.call_stack)
+            if not isinstance(index_or_key, str): raise SemanticError(sem("sem_dict_key_str"), node.index_expr.token, self.call_stack)
             value = collection.get(index_or_key)
-            if value is None and not is_assign: raise SemanticError(f"В словаре нет ключа '{index_or_key}'", node.index_expr.token, self.call_stack)
+            if value is None and not is_assign: raise SemanticError(sem("sem_dict_key", key=index_or_key), node.index_expr.token, self.call_stack)
             if is_assign: return ('dict_val', value, collection, index_or_key)
             return ('var', value)
-        raise SemanticError(f"Переменная не является массивом или словарем", node.owner_expr.token, self.call_stack)
+        raise SemanticError(sem("sem_not_indexable"), node.owner_expr.token, self.call_stack)
 
     def visit_BinOp(self, node):
         left_tuple = self.visit(node.left)
-        if left_tuple[0] == 'void': raise SemanticError("Левый операнд не имеет значения", node.left.token, self.call_stack)
+        if left_tuple[0] == 'void': raise SemanticError(sem("sem_void_left"), node.left.token, self.call_stack)
         left = left_tuple[1]
         
         right_tuple = self.visit(node.right)
-        if right_tuple[0] == 'void': raise SemanticError("Правый операнд не имеет значения", node.right.token, self.call_stack)
+        if right_tuple[0] == 'void': raise SemanticError(sem("sem_void_right"), node.right.token, self.call_stack)
         right = right_tuple[1]
         
         op_type, op_val = node.op.type, node.op.value
@@ -833,12 +969,12 @@ class Interpreter(NodeVisitor):
         if op_val == '-': return ('var', float(left) - float(right))
         if op_val == '*': return ('var', float(left) * float(right))
         if op_val == '/':
-            if float(right) == 0: raise SemanticError("Деление на ноль", node.right.token, self.call_stack)
+            if float(right) == 0: raise SemanticError(sem("sem_div_zero"), node.right.token, self.call_stack)
             return ('var', float(left) / float(right))
 
     def visit_UnaryOp(self, node):
         value_tuple = self.visit(node.expr)
-        if value_tuple[0] == 'void': raise SemanticError("Операнд не имеет значения", node.expr.token if hasattr(node.expr, 'token') else node.op, self.call_stack)
+        if value_tuple[0] == 'void': raise SemanticError(sem("sem_void_operand"), node.expr.token if hasattr(node.expr, 'token') else node.op, self.call_stack)
         value = value_tuple[1]
         if node.op.type == TokenType.НЕ: return ('var', not bool(value))
         if node.op.value == '-': return ('var', -float(value))
@@ -870,7 +1006,7 @@ class Interpreter(NodeVisitor):
             step = 1 if end_val >= start_val else -1
         if step == 0:
             raise SemanticError(
-                "Шаг цикла «нц для» не может быть равен нулю",
+                sem("sem_for_step_zero"),
                 node.token or node.var_node.token,
                 self.call_stack,
             )
@@ -921,7 +1057,7 @@ class Interpreter(NodeVisitor):
             value_tuple = self.visit(node.expr)
             if value_tuple[0] == "void":
                 raise SemanticError(
-                    "Процедура не возвращает значение",
+                    sem("sem_void_value"),
                     node.token,
                     self.call_stack,
                 )
@@ -929,7 +1065,7 @@ class Interpreter(NodeVisitor):
             sub_tuple = self.call_stack[0].get(ar.name)
             if not sub_tuple or sub_tuple[0] != "sub" or not isinstance(sub_tuple[1], FuncDecl):
                 raise SemanticError(
-                    "«возврат выражение» допустим только в функции",
+                    sem("sem_return_expr_proc"),
                     node.token,
                     self.call_stack,
                 )
@@ -956,32 +1092,65 @@ class Interpreter(NodeVisitor):
         output_parts = []
         for expr, fmt in node.items:
             val_tuple = self.visit(expr)
-            if val_tuple[0] == 'void': raise SemanticError("Выражение в 'вывод' не имеет значения", expr.token if hasattr(expr, 'token') else node.file_node.token, self.call_stack)
+            if val_tuple[0] == 'void': raise SemanticError(sem("sem_void_print"), expr.token if hasattr(expr, 'token') else node.file_node.token, self.call_stack)
             output_parts.append(self._apply_format(val_tuple[1], fmt))
         output_str = ''.join(output_parts)
         if node.file_node:
             file_handle = self._get_variable(node.file_node.name, node.file_node.token)[1]
-            if not hasattr(file_handle, 'write'): raise SemanticError(f"Переменная '{node.file_node.name}' не открыта для записи", node.file_node.token, self.call_stack)
+            if not hasattr(file_handle, 'write'): raise SemanticError(sem("sem_file_not_write", name=node.file_node.name), node.file_node.token, self.call_stack)
             try: file_handle.write(output_str + '\n')
-            except IOError as e: raise SemanticError(f"Ошибка записи в файл: {e}", node.file_node.token, self.call_stack)
+            except IOError as e: raise SemanticError(sem("sem_file_write_err", error=e), node.file_node.token, self.call_stack)
         else:
             print(output_str)
 
+    def _parse_input_value(self, raw: str, var_name: str, token):
+        """Parse a console/file input line according to the variable's declared type."""
+        text = (raw or "").strip()
+        raw_type = self._get_var_type(var_name)
+        declared = canonical_type(raw_type) if raw_type else ""
+        if declared == "лог":
+            low = text.lower()
+            if low in ("да", "true", "истина", "1"):
+                return True
+            if low in ("нет", "false", "ложь", "0"):
+                return False
+            raise SemanticError(
+                sem("sem_bool_input", name=var_name, text=text),
+                token,
+                self.call_stack,
+            )
+        if declared == "лит":
+            return text
+        try:
+            return float(text)
+        except ValueError:
+            return text
+
     def visit_Input(self, node):
         for var_node in node.var_nodes:
-            value = None
             if node.file_node:
                 file_handle = self._get_variable(node.file_node.name, node.file_node.token)[1]
-                if not hasattr(file_handle, 'read'): raise SemanticError(f"Переменная '{node.file_node.name}' не открыта для чтения", node.file_node.token, self.call_stack)
+                if not hasattr(file_handle, 'read'):
+                    raise SemanticError(
+                        sem("sem_file_not_read", name=node.file_node.name),
+                        node.file_node.token,
+                        self.call_stack,
+                    )
                 line = file_handle.readline()
-                # Семантика при EOF: в переменную записывается 0.0 (фиксированный контракт ввода из файла)
-                if not line: value = 0.0
+                # EOF → 0.0 for numeric; for лог → нет; for лит → ""
+                if not line:
+                    raw_type = self._get_var_type(var_node.name)
+                    declared = canonical_type(raw_type) if raw_type else ""
+                    if declared == "лог":
+                        value = False
+                    elif declared == "лит":
+                        value = ""
+                    else:
+                        value = 0.0
                 else:
-                    try: value = float(line.strip())
-                    except ValueError: value = line.strip()
+                    value = self._parse_input_value(line, var_node.name, var_node.token)
             else:
                 line = self._read_user_input()
-                try: value = float(line.strip())
-                except ValueError: value = line.strip()
+                value = self._parse_input_value(line, var_node.name, var_node.token)
             self._set_variable(var_node.name, value, var_node.token)
     

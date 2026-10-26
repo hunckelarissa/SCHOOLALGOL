@@ -1,95 +1,100 @@
-# SHAYDBG — протокол Step Debug
+# SHAYDBG — Step Debug protocol
 
-Краткая спецификация wire-протокола между интерпретатором SCHOOLALGOL и Eclipse ALG (**Step Debug**). Реализация: `shay_debug_protocol.py`, пауза/команды в `interpreter.py`; клиент: `org.myau.shaya.ide.debug` (`ShayaDebugTarget`, `ShayaDebugEvent`).
+Short wire-protocol spec between the SCHOOLALGOL interpreter and Eclipse ALG (**Step Debug**). Implementation: `shay_debug_protocol.py`, pause/commands in `interpreter.py`; client: `org.myau.shaya.ide.debug` (`ShayaDebugTarget`, `ShayaDebugEvent`).  
+**Russian:** [SHAYDBG.ru.md](SHAYDBG.ru.md).
 
-## Назначение
+## Purpose
 
-Пошаговая отладка `.alg` без отдельного debug-сервера: IDE управляет процессом через **stdin** (JSON-команды), интерпретатор публикует состояние строками **`SHAYDBG ` + JSON** (события). Не путать с Run / Check и с устаревшим CLI `--debug` (в SCHOOLALGOL не используется).
+Step-debug `.alg` without a separate debug server: the IDE drives the process via **stdin** (JSON commands); the interpreter publishes state as **`SHAYDBG ` + JSON** lines (events). Do not confuse with Run / Check or the obsolete CLI `--debug` (removed from the plug-in).
 
-## Включение
+## Enabling
 
-| Способ | Как |
-|--------|-----|
-| CLI | `python main.py программа.alg --debug-protocol` |
-| Точки останова при старте | `--break N` (повторять; также `--break=N`) |
-| Eclipse | Breakpoint на линейке → **ALG → Step Debug** (Ctrl+Alt+Shift+D) |
+| How | Details |
+|-----|---------|
+| CLI | `python main.py program.alg --debug-protocol` |
+| Breakpoints at start | `--break N` (repeatable; also `--break=N`) |
+| Eclipse | Ruler breakpoint → **ALG → Step Debug** (Ctrl+Alt+Shift+D) |
 
-Launch IDE: `main.py <файл> --debug-protocol` + `--break` по enabled-маркерам (`ShayaStepDebugLaunch`). Несовместимо с `--check`, `--transpile`, `--dump-ast`, `--repl`. В режиме протокола `--verbose`/`--trace` глушатся.
+IDE launch: `main.py <file> --debug-protocol` + `--break` for **enabled** markers (`ShayaStepDebugLaunch`). Incompatible with `--check`, `--transpile`, `--dump-ast`, `--repl`. In protocol mode `--verbose`/`--trace` are suppressed.
 
-## Транспорт
+## Transport
 
-| Направление | Формат |
-|-------------|--------|
-| IDE → интерпретатор | одна JSON-строка на stdin, поле `cmd` или `command` |
-| Интерпретатор → IDE | stderr: `SHAYDBG ` + компактный JSON (без пробелов вокруг `:`/`,`), `flush` |
+| Direction | Format |
+|-----------|--------|
+| IDE → interpreter | one JSON line on stdin, field `cmd` or `command` |
+| Interpreter → IDE | stderr: `SHAYDBG ` + compact JSON (no spaces around `:`/`,`), `flush` |
 
-Префикс: `SHAYDBG ` (`PROTOCOL_PREFIX`). Eclipse при Step Debug сливает stderr в stdout (`redirectErrorStream`); парсер отбрасывает строки без префикса. Человеческие баннеры (`[ШАЯ][отладка]…`, `[ШАЯ][ввод]…`) — не протокол.
+Prefix: `SHAYDBG ` (`PROTOCOL_PREFIX`). Eclipse Step Debug merges stderr into stdout (`redirectErrorStream`); the parser drops lines without the prefix. Human banners (`[ШАЯ][отладка]…`, …) are not protocol.
 
-**Stdin общий** с оператором `ввод`: команды отладки обрабатываются **только на паузе**. Во время `ввод` JSON-команды из `_DEBUG_STDIN_CMDS` игнорируются (не считаются вводом).
+**Stdin is shared** with `input`: debug commands are handled **only while paused**. During `input`, JSON commands from `_DEBUG_STDIN_CMDS` are ignored (not treated as input).
 
-## События (stdout/stderr → IDE)
+## Events (→ IDE)
 
-Поле-дискриминатор: `shay`.
+Discriminator field: `shay`.
 
-| `shay` | Поля | Смысл |
-|--------|------|--------|
-| `stopped` | `line`, `source`, `reason`, `path`, `globals`, `locals`, `stack`, `arrays`, `records` | Пауза перед оператором |
-| `terminated` | `exit` | Конец сессии (код выхода) |
-| `eval` | `expr`, `value`, `ok`, `error` | Ответ на `eval`/`watch` |
-| `set` | `name`, `value`, `ok`, `error` | Ответ на `set`/`assign` |
+| `shay` | Fields | Meaning |
+|--------|--------|---------|
+| `stopped` | `line`, `source`, `reason`, `path`, `globals`, `locals`, `stack`, `arrays`, `records` | Pause before a statement |
+| `terminated` | `exit` | Session end (exit code) |
+| `eval` | `expr`, `value`, `ok`, `error` | Reply to `eval`/`watch` |
+| `set` | `name`, `value`, `ok`, `error` | Reply to `set`/`assign` |
+| `vars` | `globals`, `locals`, `arrays`, `records` | Reply to `vars` (snapshot; stay paused) |
 
-**`reason`** (нормализованный): `breakpoint` \| `step` \| `step_into` \| `step_out`.
+**`reason`** (normalized): `breakpoint` \| `step` \| `step_into` \| `step_out`.
 
-**`stack`**: массив кадров `{name, line, source, path}` (IDE: innermost-first после разбора). **`globals`/`locals`**: плоские карты имя→JSON-значение (скаляры; сложные → `str`, усечение больших dict/list до 80 элементов в `_jsonable`). **`arrays`/`records`**: зарезервированы в схеме; текущий интерпретатор обычно шлёт `{}` (структуры могут попадать в `globals`/`locals` как есть).
+**`stack`**: frames `{name, line, source, path}` (IDE: innermost-first after parse).
 
-## Команды (stdin ← IDE)
+**`globals`/`locals`**: scalar (and dict) name→JSON maps. **`arrays`**: name → `{offset, values[]}` for `таб`. **`records`**: name → field map for `запись` instances. Large maps/lists truncated to 80 entries in `_jsonable`.
 
-| `cmd` (алиасы) | Поля | Действие |
-|----------------|------|----------|
-| `step` / `step_over` / `s` / `n` / `next` | — | Step Over: пауза на следующем операторе при глубине стека **≤** текущей (`reason=step`) — внутрь вызова не заходит |
-| `step_into` / `into` | — | Step Into: пауза на **любом** следующем операторе, включая вход в вызов (`reason=step_into`) |
-| `step_out` / `out` | — | Step Out: пауза, когда глубина стека **меньше** текущей (`reason=step_out`) |
-| `continue` / `c` / `cont` | — | Режим «только breakpoints» |
+## Commands (stdin ← IDE)
+
+| `cmd` (aliases) | Fields | Action |
+|-----------------|--------|--------|
+| `step` / `step_over` / `s` / `n` / `next` | — | Step Over: pause at next statement when stack depth **≤** current (`reason=step`) — does not enter calls |
+| `step_into` / `into` | — | Step Into: pause at **any** next statement, including into a call (`reason=step_into`) |
+| `step_out` / `out` | — | Step Out: pause when stack depth is **less** than current (`reason=step_out`) |
+| `continue` / `c` / `cont` | — | Breakpoints-only mode |
 | `quit` / `q` / `exit` | — | `SystemExit(0)` |
-| `breakpoints` / `set_breakpoints` / `bps` | `items[]` | Перезаписать BP: `{line, enabled?, path?}` (+ IDE может слать `condition`/`hitCount`/`logMessage`/`suspend` — **движок их не исполняет**) |
-| `eval` / `watch` / `evaluate` | `expr` / `expression` | Оценка; ответ `shay=eval` |
-| `set` / `assign` | `name`, `value` | `value` — выражение как у eval; ответ `shay=set` |
-| `vars` | — | В whitelist stdin (фильтр при `ввод`); **обработчика на паузе нет** |
+| `breakpoints` / `set_breakpoints` / `bps` | `items[]` | Replace BPs: `{line, enabled?, path?}`. **`enabled: false` is honored** (line omitted). `condition` / `hitCount` / `logMessage` / `suspend` — **ignored by the engine** |
+| `eval` / `watch` / `evaluate` | `expr` / `expression` | Evaluate; reply `shay=eval` |
+| `set` / `assign` | `name`, `value` | `value` like eval; reply `shay=set` |
+| `vars` | — | Emit `shay=vars` snapshot; remain paused |
 
-Пример: `{"cmd":"eval","expr":"x"}`.
+Example: `{"cmd":"eval","expr":"x + 1"}`.
 
-## Breakpoints и пауза
+## Breakpoints and pause
 
-1. Старт: `--break` → множество строк файла запуска (`path` пустой = файл запуска / любой при совпадении номера).
-2. Режим `_protocol_auto=True` (после start/`continue`): пауза только на BP.
-3. После `step*` : `_protocol_auto=False`; пауза по правилу `_step_depth` (см. таблицу команд) или на breakpoint.
-4. На каждом `stopped` IDE шлёт `breakpoints` с `path` (ресинк без гонки со `ввод` на старте).
-5. Совпадение BP: номер строки оператора + опциональный нормализованный `path` (`_bp_items`).
+1. Start: `--break` → line set for the launch file (empty `path` = launch file / any matching line).
+2. `_protocol_auto=True` (after start/`continue`): pause only on BP.
+3. After `step*`: `_protocol_auto=False`; pause by `_step_depth` (see command table) or on breakpoint.
+4. On each `stopped` the IDE sends `breakpoints` with `path` (resync without racing `input` at start); disabled markers are not included / sent with `enabled: false`.
+5. BP match: statement line number + optional normalized `path` (`_bp_items`).
 
-## Переменные / стек / eval / set
+## Variables / stack / eval / set
 
-| Возможность | Статус |
-|-------------|--------|
-| Variables view | Из `globals`/`locals` последнего `stopped` |
-| Stack frames | Из `stack` + `path` для source locator |
-| Expressions / Watch | `eval` только пока suspended |
-| Изменение переменной | `set` / UI Variables → `set`; константы запрещены |
-| Eval | Имя переменной (поиск по стеку), литералы `"…"`, `да`/`нет`/`истина`/`ложь`, int/float; **не** произвольные выражения Алгола |
+| Capability | Status |
+|------------|--------|
+| Variables view | `globals`/`locals` + `arrays`/`records` of last `stopped` |
+| Stack frames | From `stack` + `path` for source locator |
+| Expressions / Watch | `eval` only while suspended |
+| Change variable | `set` / UI Variables → `set`; constants forbidden |
+| Refresh snapshot | `vars` → `shay=vars` without stepping |
+| Eval subset | Parser `logical_or_expr`: names, literals, `a.b`, `a[i]`, unary/binary (`+ - * /`, comparisons, `и`/`или`). **Not:** statements, `:=`, multi-stmt, full I/O |
 
-## Ограничения / non-goals
+## Limits / non-goals
 
-- Не DAP, не сокет, не multi-thread, не remote attach.
-- Нет условных BP / hit count / logpoint на стороне движка (поля в sync — для IDE).
-- `step_over` / `step_into` / `step_out` учитывают `len(call_stack)` (`_step_depth` в интерпретаторе).
-- Нет отдельного события `ready`; `vars` не реализован как запрос снимка.
-- Транспиляция в C и `--check` не отлаживаются через SHAYDBG.
-- Протокол рассчитан на один процесс / один поток исполнения интерпретатора.
+- Not DAP, not socket, not multi-thread, not remote attach.
+- No conditional BP / hit count / logpoint on the engine (`enabled` **is** supported).
+- `step_over` / `step_into` / `step_out` use `len(call_stack)` (`_step_depth` in the interpreter).
+- No separate `ready` event.
+- C transpile and `--check` are not debugged via SHAYDBG.
+- One process / one interpreter thread.
 
-## Исходники
+## Sources
 
-| Сторона | Файлы |
-|---------|--------|
-| Движок | `shay_debug_protocol.py`, `interpreter.py` (`_protocol_pause`), `main.py` |
+| Side | Files |
+|------|--------|
+| Engine | `shay_debug_protocol.py`, `interpreter.py` (`_protocol_pause`), `main.py` |
 | IDE | `ShayaDebugEvent`, `ShayaDebugTarget`, `ShayaStepDebugLaunch`, `ShayaBreakpoints` |
 
-Установка IDE: [IDE_SETUP.md](../IDE_SETUP.md). Обзор проекта: [README.md](../README.md).
+IDE setup: [IDE_SETUP.md](../IDE_SETUP.md). Project overview: [README.md](../README.md).

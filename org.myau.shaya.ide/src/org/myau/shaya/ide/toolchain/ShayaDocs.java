@@ -1,6 +1,9 @@
 package org.myau.shaya.ide.toolchain;
 
 import java.io.File;
+import java.util.Locale;
+
+import org.eclipse.core.runtime.Platform;
 
 /**
  * Resolves docs and examples paths under the installed toolchain / repo.
@@ -10,28 +13,50 @@ public final class ShayaDocs {
 	private ShayaDocs() {
 	}
 
+	/** Workbench / OSGi NL language is Russian ({@code ru…}). */
+	public static boolean isRussianLocale() {
+		String nl = Platform.getNL();
+		if (nl == null || nl.isBlank()) {
+			return "ru".equals(Locale.getDefault().getLanguage());
+		}
+		return nl.toLowerCase(Locale.ROOT).startsWith("ru");
+	}
+
 	/**
-	 * Grammar / extension map doc. Prefer {@code docs/GRAMMAR.md} (synced by
-	 * install_dropins); fall back to repo-relative paths from toolchain home.
+	 * Grammar doc. Prefer {@code GRAMMAR.ru.md} when workbench language is
+	 * {@code ru}, else {@code GRAMMAR.md}; fall back to the other if missing.
 	 */
 	public static File findExtensionMap() {
+		boolean ru = isRussianLocale();
+		String preferred = ru ? "GRAMMAR.ru.md" : "GRAMMAR.md";
+		String fallback = ru ? "GRAMMAR.md" : "GRAMMAR.ru.md";
+		File hit = firstExisting(grammarCandidates(preferred));
+		if (hit != null) {
+			return hit;
+		}
+		hit = firstExisting(grammarCandidates(fallback));
+		if (hit != null) {
+			return hit;
+		}
 		return firstExisting(
-				rel("docs/GRAMMAR.md"),
-				rel("../docs/GRAMMAR.md"),
-				rel("../../docs/GRAMMAR.md"),
-				rel("GRAMMAR.md"),
-				rel("../GRAMMAR.md"),
-				rel("../../GRAMMAR.md"),
 				rel("docs/EXTENSION_MAP.md"),
 				rel("../docs/EXTENSION_MAP.md"),
 				rel("../../docs/EXTENSION_MAP.md"));
 	}
 
+	/**
+	 * Learning-track README. Prefer {@code README.ru.md} for Russian locale,
+	 * else {@code README.md}; fall back to the other if missing.
+	 */
 	public static File findTrackReadme() {
-		return firstExisting(
-				rel("examples/track/README.md"),
-				rel("../examples/track/README.md"),
-				rel("../../examples/track/README.md"));
+		boolean ru = isRussianLocale();
+		String preferred = ru ? "README.ru.md" : "README.md";
+		String fallback = ru ? "README.md" : "README.ru.md";
+		File hit = firstExisting(trackReadmeCandidates(preferred));
+		if (hit != null) {
+			return hit;
+		}
+		return firstExisting(trackReadmeCandidates(fallback));
 	}
 
 	public static File findTrackDir() {
@@ -43,6 +68,25 @@ public final class ShayaDocs {
 				rel("examples/track"),
 				rel("../examples/track"),
 				rel("../../examples/track"));
+	}
+
+	private static File[] grammarCandidates(String fileName) {
+		return new File[] {
+				rel("docs/" + fileName),
+				rel("../docs/" + fileName),
+				rel("../../docs/" + fileName),
+				rel(fileName),
+				rel("../" + fileName),
+				rel("../../" + fileName)
+		};
+	}
+
+	private static File[] trackReadmeCandidates(String fileName) {
+		return new File[] {
+				rel("examples/track/" + fileName),
+				rel("../examples/track/" + fileName),
+				rel("../../examples/track/" + fileName)
+		};
 	}
 
 	private static File rel(String relative) {

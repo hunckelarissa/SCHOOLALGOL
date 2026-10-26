@@ -370,5 +370,112 @@ class TestDebugSteps(unittest.TestCase):
         self.assertEqual(self._stops(["step_into", "step_out", "continue"]), [7, 3, 8])
 
 
+class TestShaydbgSnapshotEval(unittest.TestCase):
+    def _events(self, src: str, break_line: int, commands: list) -> list[dict]:
+        with tempfile.TemporaryDirectory() as tmp:
+            alg = os.path.join(tmp, "dbg.alg")
+            with open(alg, "w", encoding="utf-8") as f:
+                f.write(src)
+            stdin_parts = []
+            for c in commands:
+                if isinstance(c, dict):
+                    stdin_parts.append(json.dumps(c, ensure_ascii=False) + "\n")
+                else:
+                    stdin_parts.append(json.dumps({"cmd": c}, ensure_ascii=False) + "\n")
+            r = subprocess.run(
+                [sys.executable, os.path.join(_root, "main.py"), alg,
+                 "--debug-protocol", "--break", str(break_line)],
+                input="".join(stdin_parts), capture_output=True, text=True, timeout=15,
+                encoding="utf-8", errors="replace", env=_ENV,
+            )
+        out = []
+        for raw in r.stderr.splitlines():
+            if raw.startswith("SHAYDBG "):
+                out.append(json.loads(raw[len("SHAYDBG "):]))
+        return out
+
+    def test_stopped_has_arrays_and_records(self):
+        src = """
+запись Точка
+нач
+  цел x
+кон
+алг основнаяпрограмма
+нач
+  Точка p
+  таб цел a[1:2]
+  p.x := 5
+  a[1] := 9
+  вывод p.x
+кон
+"""
+        evs = self._events(src, 12, ["vars", "continue"])
+        stopped = next(e for e in evs if e.get("shay") == "stopped")
+        self.assertIn("a", stopped.get("arrays") or {})
+        self.assertEqual(stopped["arrays"]["a"]["values"][0], 9.0)
+        self.assertIn("p", stopped.get("records") or {})
+        self.assertEqual(stopped["records"]["p"]["x"], 5.0)
+        self.assertNotIn("a", stopped.get("locals") or {})
+        vars_ev = next(e for e in evs if e.get("shay") == "vars")
+        self.assertIn("a", vars_ev.get("arrays") or {})
+
+    def test_eval_binop_and_member(self):
+        src = """
+запись Точка
+нач
+  цел x
+кон
+алг основнаяпрограмма
+нач
+  Точка p
+  цел n
+  p.x := 3
+  n := 4
+  вывод n
+кон
+"""
+        evs = self._events(
+            src,
+            12,
+            [
+                {"cmd": "eval", "expr": "n + 1"},
+                {"cmd": "eval", "expr": "p.x"},
+                "continue",
+            ],
+        )
+        evals = [e for e in evs if e.get("shay") == "eval"]
+        self.assertTrue(evals[0].get("ok"))
+        self.assertEqual(evals[0].get("value"), 5.0)
+        self.assertTrue(evals[1].get("ok"))
+        self.assertEqual(evals[1].get("value"), 3.0)
+
+    def test_disabled_breakpoint_skipped(self):
+        src = (
+            "алг основнаяпрограмма\n"
+            "нач\n"
+            "  вывод 1\n"
+            "  вывод 2\n"
+            "  вывод 3\n"
+            "кон\n"
+        )
+        # Start with break on line 3; then disable it and continue — should not stop on 3 again
+        # after resync; we stop once at start, send disabled BP, continue to end.
+        evs = self._events(
+            src,
+            3,
+            [
+                {
+                    "cmd": "breakpoints",
+                    "items": [{"line": 3, "enabled": False}, {"line": 5, "enabled": True}],
+                },
+                "continue",
+            ],
+        )
+        stopped_lines = [e["line"] for e in evs if e.get("shay") == "stopped"]
+        self.assertEqual(stopped_lines[0], 3)
+        self.assertIn(5, stopped_lines)
+        self.assertEqual(stopped_lines.count(3), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

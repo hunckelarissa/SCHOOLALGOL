@@ -176,10 +176,10 @@ public class ShayaEditor extends TextEditor {
 			String comment = cs == ShayaCommentStyle.LINE_PIPE ? "|"
 					: (cs == ShayaCommentStyle.BLOCK_PAREN ? "(* *)" : "//");
 			boolean canCheck = engineId != null && ShayaToolchain.supportsCheck(engineId);
-			boolean canCli = engineId != null && ShayaToolchain.supportsDebug(engineId);
+			boolean canTr = engineId != null && ShayaToolchain.supportsTranspile(engineId);
 			boolean canStep = engineId != null && ShayaToolchain.supportsStepDebugUi(engineId);
 			String check = canCheck ? "C✓" : "C—";
-			String cli = canCli ? "D✓" : "D—";
+			String tr = canTr ? "T✓" : "T—";
 			String step = canStep ? "S✓" : "S—";
 			String msg = "ALG · " + engine;
 			IPreferenceStore prefs = Activator.getDefault() != null
@@ -190,7 +190,7 @@ public class ShayaEditor extends TextEditor {
 			}
 			String tip = "Engine: " + engine
 					+ "\nCheck: " + (canCheck ? "yes" : "no")
-					+ " · CLI Debug: " + (canCli ? "yes" : "no")
+					+ " · Transpile: " + (canTr ? "yes" : "no")
 					+ " · Step Debug: " + (canStep ? "yes" : "no")
 					+ "\nComments: " + comment
 					+ " · Plugin: v" + shortVersion()
@@ -198,7 +198,7 @@ public class ShayaEditor extends TextEditor {
 					+ (saveNa ? "\nCheck on save: N/A for this engine" : "");
 			slm.setMessage(msg);
 			if (engineStatusItem != null) {
-				engineStatusItem.setText(check + " " + cli + " " + step);
+				engineStatusItem.setText(check + " " + tr + " " + step);
 				engineStatusItem.setToolTipText(tip);
 			}
 		} catch (Exception ignored) {

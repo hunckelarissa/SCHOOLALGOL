@@ -19,7 +19,7 @@ import org.myau.shaya.ide.toolchain.ShayaToolchain;
 public final class ShayaLastLaunch {
 
 	public enum Mode {
-		RUN, CHECK, DEBUG
+		RUN, CHECK, DEBUG, TRANSPILE
 	}
 
 	public static final class Entry {
@@ -34,7 +34,7 @@ public final class ShayaLastLaunch {
 		}
 
 		public String label() {
-			String m = mode == Mode.RUN ? "Run" : (mode == Mode.CHECK ? "Check" : "Debug");
+			String m = modeLabel(mode);
 			String name = new File(diskPath).getName();
 			String engId = ShayaToolchain.engineIdForName(name);
 			String eng = engId != null ? ShayaToolchain.engineDisplayName(engId) : "?";
@@ -166,8 +166,20 @@ public final class ShayaLastLaunch {
 		if (!hasLast()) {
 			return "(none)";
 		}
-		String m = mode == Mode.RUN ? "Run" : (mode == Mode.CHECK ? "Check" : "Debug");
-		return m + " · " + new File(diskPath).getName();
+		return modeLabel(mode) + " · " + new File(diskPath).getName();
+	}
+
+	private static String modeLabel(Mode m) {
+		if (m == Mode.CHECK) {
+			return "Check";
+		}
+		if (m == Mode.DEBUG) {
+			return "Debug";
+		}
+		if (m == Mode.TRANSPILE) {
+			return "Transpile";
+		}
+		return "Run";
 	}
 
 	private static ShayaSourceResolver.ResolvedSource toSource(Mode m, String disk, String wsPath) {

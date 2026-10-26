@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PluginVer = "0.6.7"
+$PluginVer = "0.6.11"
 
 function Find-EclipseDropins {
     param([string]$Preferred)
@@ -100,7 +100,8 @@ $tcReadme = @(
     "    tools/shaya-run.bat",
     "    interpreters/SchoolAlgol/   - runtime *.py from repo root",
     "    examples/                   - optional (install_dropins.ps1 -Examples)",
-    "    docs/GRAMMAR.md             - synced from repo if present",
+    "    docs/GRAMMAR.md             - English grammar (synced)",
+    "    docs/GRAMMAR.ru.md          - Russian grammar (synced if present)",
     "",
     "Preferences -> ALG -> Toolchain home = this folder (or empty for auto-detect).",
     "Sync: install_dropins.ps1 [-PluginJar] [-Examples]",
@@ -122,13 +123,15 @@ if ($Examples) {
     }
 }
 
-# Optional: GRAMMAR.md for About / menu (honest: only if present in repo)
-$grammarSrc = Join-Path $Root "GRAMMAR.md"
-if (Test-Path -LiteralPath $grammarSrc) {
-    $docsDest = Join-Path $Toolchain "docs"
-    New-Item -ItemType Directory -Force -Path $docsDest | Out-Null
-    Copy-Item -LiteralPath $grammarSrc -Destination (Join-Path $docsDest "GRAMMAR.md") -Force
-    Write-Host "Synced GRAMMAR.md -> $docsDest"
+# Grammar docs for About / menu (EN default + RU mirror)
+$docsDest = Join-Path $Toolchain "docs"
+New-Item -ItemType Directory -Force -Path $docsDest | Out-Null
+foreach ($docName in @("GRAMMAR.md", "GRAMMAR.ru.md")) {
+    $grammarSrc = Join-Path $Root $docName
+    if (Test-Path -LiteralPath $grammarSrc) {
+        Copy-Item -LiteralPath $grammarSrc -Destination (Join-Path $docsDest $docName) -Force
+        Write-Host "Synced $docName -> $docsDest"
+    }
 }
 
 if ($PluginJar) {
@@ -150,7 +153,11 @@ if ($PluginJar) {
             "org.myau.shaya.ide_0.6.3.jar",
             "org.myau.shaya.ide_0.6.4.jar",
             "org.myau.shaya.ide_0.6.5.jar",
-            "org.myau.shaya.ide_0.6.6.jar"
+            "org.myau.shaya.ide_0.6.6.jar",
+            "org.myau.shaya.ide_0.6.7.jar",
+            "org.myau.shaya.ide_0.6.8.jar",
+            "org.myau.shaya.ide_0.6.9.jar",
+            "org.myau.shaya.ide_0.6.10.jar"
         )) {
             $oldPath = Join-Path $EclipseDropins $old
             if (Test-Path -LiteralPath $oldPath) {
@@ -159,12 +166,24 @@ if ($PluginJar) {
                     Write-Host "Removed old plugin JAR: $old"
                 } catch {
                     Write-Warning "Could not remove $old (locked?): $($_.Exception.Message)"
+                    Write-Warning "Close Eclipse, then delete $oldPath manually."
                 }
             }
         }
     }
 }
 
+# C4: warn if several plugin JARs remain in dropins (OSGi may load the wrong one).
+$pluginJars = @(Get-ChildItem -LiteralPath $EclipseDropins -Filter "org.myau.shaya.ide_*.jar" -ErrorAction SilentlyContinue)
+if ($pluginJars.Count -gt 1) {
+    $names = ($pluginJars | ForEach-Object { $_.Name }) -join ", "
+    Write-Warning "Multiple ALG plugin JARs in dropins: $names"
+    Write-Warning "Close Eclipse, keep only org.myau.shaya.ide_$PluginVer.jar, remove the rest."
+} elseif ($pluginJars.Count -eq 1 -and $pluginJars[0].Name -ne "org.myau.shaya.ide_$PluginVer.jar") {
+    Write-Warning "Dropins has $($pluginJars[0].Name); expected org.myau.shaya.ide_$PluginVer.jar (run with -PluginJar after build)."
+}
+
 Write-Host "Done. Preferences → ALG → Toolchain home should point to:"
 Write-Host "  $Toolchain"
 Write-Host "Tip: .\install_dropins.ps1 -Examples   to sync examples/track for Учебный трек…"
+Write-Host "Tip: close Eclipse before removing old org.myau.shaya.ide_*.jar from dropins."

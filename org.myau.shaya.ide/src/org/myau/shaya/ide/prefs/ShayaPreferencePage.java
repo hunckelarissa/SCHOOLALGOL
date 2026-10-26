@@ -7,6 +7,7 @@ import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.jface.preference.FileFieldEditor;
 import org.eclipse.jface.preference.IntegerFieldEditor;
 import org.eclipse.jface.preference.StringFieldEditor;
+import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
@@ -17,6 +18,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.myau.shaya.ide.Activator;
+import org.myau.shaya.ide.i18n.Messages;
 import org.myau.shaya.ide.run.ShayaLastLaunch;
 import org.myau.shaya.ide.toolchain.ShayaToolchain;
 
@@ -28,14 +30,8 @@ public class ShayaPreferencePage extends FieldEditorPreferencePage implements IW
 	public ShayaPreferencePage() {
 		super(GRID);
 		setPreferenceStore(Activator.getDefault().getPreferenceStore());
-		setDescription(
-				"ALG IDE — SCHOOLALGOL (.alg).\n\n"
-						+ "Toolchain home пустой = автопоиск dropins/"
-						+ ShayaToolchain.DROPINS_FOLDER + "/.\n"
-						+ "Один движок: .alg → interpreters/"
-						+ ShayaToolchain.ENGINE_DIR + "/main.py.\n"
-						+ "Extra args → tools/shaya-run.bat · Python пустой = PATH / py -3.\n"
-						+ "Check on save: синтаксическая проверка (lex + parse).");
+		setDescription(NLS.bind(Messages.Prefs_description,
+				ShayaToolchain.DROPINS_FOLDER, ShayaToolchain.ENGINE_DIR));
 	}
 
 	@Override
@@ -46,33 +42,33 @@ public class ShayaPreferencePage extends FieldEditorPreferencePage implements IW
 	protected void createFieldEditors() {
 		addField(new DirectoryFieldEditor(
 				ShayaPreferenceConstants.TOOLCHAIN_HOME,
-				"Toolchain home (" + ShayaToolchain.DROPINS_FOLDER + "):",
+				NLS.bind(Messages.Prefs_toolchainHome, ShayaToolchain.DROPINS_FOLDER),
 				getFieldEditorParent()));
 		addField(new StringFieldEditor(
 				ShayaPreferenceConstants.EXTRA_ARGS,
-				"Extra args:",
+				Messages.Prefs_extraArgs,
 				getFieldEditorParent()));
 		addField(new FileFieldEditor(
 				ShayaPreferenceConstants.PYTHON_EXECUTABLE,
-				"Python (empty = PATH / py -3):",
+				Messages.Prefs_python,
 				getFieldEditorParent()));
 		IntegerFieldEditor indent = new IntegerFieldEditor(
 				ShayaPreferenceConstants.INDENT_WIDTH,
-				"Indent width (spaces, 2 or 4):",
+				Messages.Prefs_indentWidth,
 				getFieldEditorParent());
 		indent.setValidRange(2, 4);
 		addField(indent);
 		addField(new BooleanFieldEditor(
 				ShayaPreferenceConstants.INSERT_SPACES,
-				"Insert spaces for tabs (off = real tab character)",
+				Messages.Prefs_insertSpaces,
 				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(
 				ShayaPreferenceConstants.CHECK_ON_SAVE,
-				"Check on save (.alg)",
+				Messages.Prefs_checkOnSave,
 				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(
 				ShayaPreferenceConstants.SHOW_WELCOME_ON_STARTUP,
-				"Показать Welcome при следующем запуске Eclipse",
+				Messages.Prefs_showWelcome,
 				getFieldEditorParent()));
 	}
 
@@ -82,31 +78,31 @@ public class ShayaPreferencePage extends FieldEditorPreferencePage implements IW
 		((GridLayout) parent.getLayout()).numColumns += 2;
 
 		Button validate = new Button(parent, SWT.PUSH);
-		validate.setText("Validate…");
+		validate.setText(Messages.Prefs_validateButton);
 		validate.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, false, false));
 		validate.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				performApply();
 				String status = ShayaToolchain.validateStatus();
-				boolean ok = !status.contains("ОШИБКА");
+				boolean ok = !(status.contains("ERROR") || status.contains("ОШИБКА"));
 				if (ok) {
-					MessageDialog.openInformation(getShell(), "ALG Validate", status);
+					MessageDialog.openInformation(getShell(), Messages.Prefs_validateTitle, status);
 				} else {
-					MessageDialog.openWarning(getShell(), "ALG Validate", status);
+					MessageDialog.openWarning(getShell(), Messages.Prefs_validateTitle, status);
 				}
 			}
 		});
 
 		Button clear = new Button(parent, SWT.PUSH);
-		clear.setText("Clear Recent");
+		clear.setText(Messages.Prefs_clearRecentButton);
 		clear.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, false, false));
 		clear.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				ShayaLastLaunch.clearHistory();
-				MessageDialog.openInformation(getShell(), "ALG",
-						"Recent / Run Last history cleared.");
+				MessageDialog.openInformation(getShell(), Messages.Prefs_clearTitle,
+						Messages.Prefs_clearMessage);
 			}
 		});
 	}

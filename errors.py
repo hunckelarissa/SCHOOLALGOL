@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from i18n import t
+
 
 def _format_char_repr(ch: str) -> str:
-    """Форматирует символ для сообщения лексера."""
+    """Format a character for lexer messages."""
     if len(ch) != 1:
         return repr(ch)
     if ch.isprintable() and ch not in ("'", '"', "\\"):
@@ -14,7 +16,7 @@ def _format_char_repr(ch: str) -> str:
 
 
 class InterpreterError(Exception):
-    """Базовый класс для всех ошибок интерпретатора."""
+    """Base class for all interpreter errors."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -24,21 +26,23 @@ class InterpreterError(Exception):
 
 
 class LexerError(InterpreterError):
-    """Ошибка на этапе лексического анализа."""
+    """Lexical analysis error."""
 
     def __init__(self, message: str, line: int, col: int, char: Optional[str] = None) -> None:
         char_part = ""
         if char is not None:
-            char_part = f" (символ {_format_char_repr(char)})"
-        super().__init__(f"[Строка {line}:{col}] Лексическая ошибка: {message}{char_part}")
+            char_part = t("char_part", char=_format_char_repr(char))
+        super().__init__(
+            t("lexer_prefix", line=line, col=col, message=message, char_part=char_part)
+        )
         self.line = line
         self.col = col
         self.char = char
-        self.hint = "Подсказка: проверьте раскладку клавиатуры и допустимые символы языка .alg."
+        self.hint = t("hint_lexer")
 
 
 class ParserError(InterpreterError):
-    """Ошибка на этапе синтаксического анализа."""
+    """Syntax analysis error."""
 
     def __init__(
         self,
@@ -46,20 +50,23 @@ class ParserError(InterpreterError):
         token: Any,
         context: Optional[str] = None,
     ) -> None:
-        ctx = f" Контекст: «{context}»." if context else ""
+        ctx = t("ctx_prefix", context=context) if context else ""
         super().__init__(
-            f"[Строка {token.line}:{token.col}] Синтаксическая ошибка: {message}.{ctx}"
+            t(
+                "parser_prefix",
+                line=token.line,
+                col=token.col,
+                message=message,
+                ctx=ctx,
+            )
         )
         self.token = token
         self.context = context
-        self.hint = (
-            "Подсказка: сверьте синтаксис с GRAMMAR.md "
-            "(алг … нач … кон, :=, нц … кц)."
-        )
+        self.hint = t("hint_parser")
 
 
 class SemanticError(InterpreterError):
-    """Ошибка на этапе семантического анализа или выполнения."""
+    """Semantic analysis or runtime error."""
 
     def __init__(
         self,
@@ -67,32 +74,57 @@ class SemanticError(InterpreterError):
         token: Optional[Any] = None,
         call_stack: Optional[Any] = None,
     ) -> None:
-        loc = f"[Строка {token.line}:{token.col}] " if token else ""
-        super().__init__(f"{loc}Семантическая ошибка: {message}")
+        loc = (
+            t("loc_line", line=token.line, col=token.col)
+            if token
+            else ""
+        )
+        super().__init__(t("semantic_prefix", loc=loc, message=message))
         self.token = token
         self.call_stack = call_stack
         self.hint = _semantic_hint(message)
 
 
 class TranspilerError(InterpreterError):
-    """Ошибка на этапе транспиляции в C."""
+    """C transpilation error."""
 
     def __init__(self, message: str, node: Optional[Any] = None) -> None:
         extra = ""
         if node is not None:
-            extra = f" (узел AST: {type(node).__name__})"
+            extra = f" (AST node: {type(node).__name__})"
             tok = getattr(node, "token", None)
             if tok is not None and hasattr(tok, "line"):
-                extra += f", строка {tok.line}"
-        super().__init__(f"Ошибка транспиляции: {message}{extra}")
+                extra += f", line {tok.line}"
+        super().__init__(t("transpiler_prefix", message=message, extra=extra))
         self.node = node
         self.token = getattr(node, "token", None) if node is not None else None
-        self.hint = "Подсказка: не все конструкции .alg поддерживаются в C-транспиляторе; см. README."
+        self.hint = t("hint_transpiler")
 
 
 def _semantic_hint(message: str) -> str:
-    """Подсказка по тексту семантической ошибки."""
+    """Hint based on semantic error text (RU body messages still dominate)."""
     lower = message.lower()
+    if get_lang_is_en():
+        if "не определена" in lower or "не определен" in lower or "not defined" in lower:
+            return (
+                "Hint: declare the variable (int, real, str …) in the current procedure "
+                "or at the top level; names are case-insensitive."
+            )
+        if "неверное количество аргументов" in lower or (
+            "ожидает" in lower and "аргумент" in lower
+        ):
+            return "Hint: check argument count/order against the declaration (arg …; res …)."
+        if "вне границ массива" in lower or "индекс массива" in lower:
+            return "Hint: check tab … [lo:hi] declaration and the allowed index range."
+        if "деление на ноль" in lower or "division by zero" in lower:
+            return "Hint: check the divisor before using /."
+        if "не открыта" in lower or "не удалось открыть" in lower:
+            return "Hint: call open(f, path, mode) before file input/output."
+        if "необъявленной локальной" in lower:
+            return "Hint: in a for-loop the variable must be declared first (int i)."
+        if "главная программа" in lower or "main program" in lower:
+            return "Hint: add a parameterless «алг основнаяпрограмма» or «proc mainprogram»."
+        return "Hint: see GRAMMAR.md and run with --verbose for stage tracing."
     if "не определена" in lower or "не определен" in lower:
         return (
             "Подсказка: объявите переменную (цел, вещ, лит …) в текущей процедуре "
@@ -113,17 +145,23 @@ def _semantic_hint(message: str) -> str:
     return "Подсказка: см. GRAMMAR.md и запустите с --verbose для трассировки этапов."
 
 
+def get_lang_is_en() -> bool:
+    from i18n import get_lang
+
+    return get_lang() == "en"
+
+
 def format_error(error: InterpreterError, source_code: str) -> str:
-    """Форматирует подробное сообщение об ошибке с указателем и подсказкой."""
+    """Format a detailed error with pointer and hint."""
     lines = source_code.split("\n")
 
     stack_trace = ""
     if hasattr(error, "call_stack") and error.call_stack:
-        stack_trace += "Трассировка вызовов (от последнего к первому):\n"
+        stack_trace += t("stack_header")
         for ar in reversed(error.call_stack):
             if ar.name == "global" and len(error.call_stack) > 1:
                 continue
-            stack_trace += f"  в «{ar.name}»\n"
+            stack_trace += t("stack_frame", name=ar.name)
 
     header = str(error)
 

@@ -474,5 +474,276 @@ class TestCPrototypes(unittest.TestCase):
         self.assertEqual(_compile_and_run(src).split(), expected)
 
 
+class TestRecordStringFieldC(unittest.TestCase):
+    def test_transpile_uses_strdup_for_lit_field(self):
+        src = """
+запись Чел
+нач
+  лит имя
+кон
+алг основнаяпрограмма
+нач
+  Чел c
+  c.имя := "Ann"
+  вывод c.имя
+кон
+"""
+        c = CTranspiler(_parse(src), "t.alg").transpile()
+        self.assertIn("strdup", c)
+        self.assertIn("free(", c)
+
+    @unittest.skipUnless(_gcc_available(), "gcc не найден")
+    def test_c_parity_lit_field(self):
+        src = """
+запись Чел
+нач
+  лит имя
+кон
+алг основнаяпрограмма
+нач
+  Чел c
+  c.имя := "Ann"
+  вывод c.имя
+кон
+"""
+        self.assertEqual(_run(src).strip(), "Ann")
+        self.assertEqual(_compile_and_run(src).strip(), "Ann")
+
+
+class TestDictRuntime(unittest.TestCase):
+    def test_alg_dict_free_in_runtime(self):
+        src = """
+алг основнаяпрограмма
+нач
+  словарь d
+  d["a"] := 1
+  вывод d["a"]
+кон
+"""
+        c = CTranspiler(_parse(src), "t.alg").transpile()
+        self.assertIn("alg_dict_init(&d)", c)
+        self.assertIn("alg_dict_free(&d)", c)
+        # free at end of main, before return 0
+        free_at = c.index("alg_dict_free(&d)")
+        ret_at = c.rindex("return 0;")
+        self.assertLess(free_at, ret_at)
+
+
+class TestRecordArrayFields(unittest.TestCase):
+    def test_interp_array_field(self):
+        src = """
+запись Буф
+нач
+  таб цел a[1:3]
+кон
+алг основнаяпрограмма
+нач
+  Буф b
+  b.a[1] := 10
+  b.a[3] := 30
+  вывод b.a[1]
+  вывод b.a[3]
+кон
+"""
+        self.assertEqual(_run(src).split(), ["10", "30"])
+
+    def test_c_emits_array_field(self):
+        src = """
+запись Буф
+нач
+  таб цел a[0:2]
+кон
+алг основнаяпрограмма
+нач
+  Буф b
+  b.a[0] := 1
+  вывод b.a[0]
+кон
+"""
+        c = CTranspiler(_parse(src), "t.alg").transpile()
+        self.assertIn("a[3]", c)
+        self.assertIn("b.a[((int)0) - 0]", c)
+
+    @unittest.skipUnless(_gcc_available(), "gcc не найден")
+    def test_c_parity_array_field(self):
+        src = """
+запись Буф
+нач
+  таб цел a[1:3]
+кон
+алг основнаяпрограмма
+нач
+  Буф b
+  b.a[1] := 10
+  b.a[3] := 30
+  вывод b.a[1]
+  вывод b.a[3]
+кон
+"""
+        expected = ["10", "30"]
+        self.assertEqual(_run(src).split(), expected)
+        self.assertEqual(_compile_and_run(src).split(), expected)
+
+
+class TestLenNumberError(unittest.TestCase):
+    def test_semantic_rejects_len_number(self):
+        src = """
+алг основнаяпрограмма
+нач
+  вывод длина(42)
+кон
+"""
+        with self.assertRaises(SemanticError):
+            _check(src)
+
+    def test_len_string_ok(self):
+        src = """
+алг основнаяпрограмма
+нач
+  вывод длина("ab")
+кон
+"""
+        self.assertEqual(_run(src).strip(), "2")
+
+
+class TestMultiDimArraysRejected(unittest.TestCase):
+    def test_comma_bounds_rejected(self):
+        from errors import ParserError
+
+        src = """
+алг основнаяпрограмма
+нач
+  таб цел a[1:2, 1:3]
+кон
+"""
+        with self.assertRaises(ParserError) as ctx:
+            _parse(src)
+        self.assertIn("Многомерные", str(ctx.exception))
+
+    def test_double_bracket_rejected(self):
+        from errors import ParserError
+
+        src = """
+алг основнаяпрограмма
+нач
+  таб цел a[1:2][1:3]
+кон
+"""
+        with self.assertRaises(ParserError) as ctx:
+            _parse(src)
+        self.assertIn("Многомерные", str(ctx.exception))
+
+
+class TestReplPersist(unittest.TestCase):
+    def test_session_keeps_bindings(self):
+        from repl import ReplSession, _run_source
+
+        session = ReplSession()
+        warnings = WarningCollector()
+        _run_source(
+            """
+алг основнаяпрограмма
+нач
+  цел x
+  x := 7
+кон
+""",
+            verbose=False,
+            trace=False,
+            warnings=warnings,
+            session=session,
+        )
+        self.assertIn("x", session.members)
+        self.assertEqual(session.members["x"][1], 7.0)
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _run_source(
+                """
+алг основнаяпрограмма
+нач
+  вывод x
+кон
+""",
+                verbose=False,
+                trace=False,
+                warnings=warnings,
+                session=session,
+            )
+        self.assertIn("7", buf.getvalue().split())
+
+
+class TestNestedBreakContinue(unittest.TestCase):
+    def test_nested_break_nearest_only(self):
+        src = """
+алг основнаяпрограмма
+нач
+  цел i, j
+  нц для i от 1 до 2
+    нц для j от 1 до 5
+      если j = 3 то
+        выход
+      все
+      вывод j
+    кц
+  кц
+кон
+"""
+        # nearest break: each outer i prints 1 2 then breaks inner
+        self.assertEqual(_run(src).split(), ["1", "2", "1", "2"])
+
+    @unittest.skipUnless(_gcc_available(), "gcc не найден")
+    def test_nested_break_c_parity(self):
+        src = """
+алг основнаяпрограмма
+нач
+  цел i, j
+  нц для i от 1 до 2
+    нц для j от 1 до 5
+      если j = 3 то
+        выход
+      все
+      вывод j
+    кц
+  кц
+кон
+"""
+        expected = _run(src).split()
+        self.assertEqual(_compile_and_run(src).split(), expected)
+
+
+class TestOwnedStringConcat(unittest.TestCase):
+    def test_nested_concat_uses_owned(self):
+        src = """
+алг основнаяпрограмма
+нач
+  лит a, b, c, s
+  a := "a"
+  b := "b"
+  c := "c"
+  s := a + b + c
+  вывод s
+  вывод длина(a + b)
+кон
+"""
+        c = CTranspiler(_parse(src), "t.alg").transpile()
+        self.assertIn("alg_str_concat_owned", c)
+        self.assertIn("alg_strlen_free", c)
+
+    @unittest.skipUnless(_gcc_available(), "gcc не найден")
+    def test_c_parity_nested_concat(self):
+        src = """
+алг основнаяпрограмма
+нач
+  лит s
+  s := "a" + "b" + "c"
+  вывод s
+  вывод длина("xy" + "z")
+кон
+"""
+        expected = _run(src).split()
+        self.assertEqual(_compile_and_run(src).split(), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

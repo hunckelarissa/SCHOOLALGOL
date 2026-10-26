@@ -7,22 +7,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchWindow;
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.console.IOConsole;
 import org.eclipse.ui.console.IOConsoleOutputStream;
+import org.eclipse.ui.ide.IDE;
 import org.myau.shaya.ide.Activator;
 import org.myau.shaya.ide.markers.ShayaMarkers;
 import org.myau.shaya.ide.prefs.ShayaPreferenceConstants;
 import org.myau.shaya.ide.toolchain.ShayaToolchain;
 
 /**
- * Invokes tools/shaya-run.bat for Run / Check.
+ * Invokes tools/shaya-run.bat for Run / Check / Transpile.
  * Works for workspace files and File→Open (external) paths.
  */
 public final class ShayaLauncher {
@@ -45,8 +51,22 @@ public final class ShayaLauncher {
 		launch(program, workspaceFile, "--check", true);
 	}
 
+	public static void transpile(File program, IFile workspaceFile) {
+		String engine = ShayaToolchain.engineIdFor(program);
+		if (engine != null && !ShayaToolchain.supportsTranspile(engine)) {
+			ShayaConsole.showError(
+					"Transpile не поддерживается для " + ShayaToolchain.engineDisplayName(engine)
+							+ ".\nДля .alg используйте ALG → Transpile.");
+			return;
+		}
+		launch(program, workspaceFile, "--transpile", true);
+	}
+
+	/** @deprecated Legacy CLI Debug — use Step Debug / SHAYDBG. */
+	@Deprecated
 	public static void debug(File program, IFile workspaceFile) {
-		launch(program, workspaceFile, "--debug", true);
+		ShayaConsole.showError(
+				"CLI Debug is not supported. Use ALG → Step Debug (Ctrl+Alt+Shift+D).");
 	}
 
 	/**
@@ -132,14 +152,16 @@ public final class ShayaLauncher {
 		writeLine(out, "---");
 
 		final IFile markerFile = workspaceFile;
+		final File programFile = program;
 		String jobName;
 		if ("--check".equals(mode)) {
 			jobName = "Check ALG: " + program.getName();
-		} else if ("--debug".equals(mode)) {
-			jobName = "Debug ALG: " + program.getName();
+		} else if ("--transpile".equals(mode)) {
+			jobName = "Transpile ALG: " + program.getName();
 		} else {
 			jobName = "Run ALG: " + program.getName();
 		}
+		final boolean openC = "--transpile".equals(mode);
 		Job job = new Job(jobName) {
 			@Override
 			protected IStatus run(IProgressMonitor monitor) {
@@ -155,6 +177,9 @@ public final class ShayaLauncher {
 								writeLine(out, "markers: " + e.getMessage());
 							}
 						}
+						if (openC && r.exitCode == 0) {
+							revealGeneratedC(programFile, markerFile, out);
+						}
 					});
 					return Status.OK_STATUS;
 				} catch (Exception e) {
@@ -166,6 +191,38 @@ public final class ShayaLauncher {
 		};
 		job.setUser(true);
 		job.schedule();
+	}
+
+	/** Open sibling {@code name.c} after a successful {@code --transpile}. */
+	private static void revealGeneratedC(File algFile, IFile workspaceAlg, IOConsoleOutputStream out) {
+		String base = algFile.getName();
+		int dot = base.lastIndexOf('.');
+		String cName = (dot > 0 ? base.substring(0, dot) : base) + ".c";
+		File cDisk = new File(algFile.getParentFile(), cName);
+		if (!cDisk.isFile()) {
+			writeLine(out, "Generated .c not found: " + cDisk.getAbsolutePath());
+			return;
+		}
+		writeLine(out, "C file: " + cDisk.getAbsolutePath());
+		try {
+			if (workspaceAlg != null && workspaceAlg.getParent() != null) {
+				workspaceAlg.getParent().refreshLocal(IResource.DEPTH_ONE, null);
+				IFile cWs = workspaceAlg.getParent().getFile(new Path(cName));
+				if (cWs.exists()) {
+					IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+					if (win != null) {
+						IWorkbenchPage page = win.getActivePage();
+						if (page != null) {
+							IDE.openEditor(page, cWs, true);
+							return;
+						}
+					}
+				}
+			}
+			writeLine(out, "Open the .c file from the Project Explorer (Refresh if needed).");
+		} catch (Exception e) {
+			writeLine(out, "Could not open .c in editor: " + e.getMessage());
+		}
 	}
 
 	/** Public for Launch Framework (Run As / Debug As). */

@@ -325,7 +325,21 @@ class Parser:
             start_idx = self.expr()
             self.eat(TokenType.COLON)
             end_idx = self.expr()
+            if self.current_token().type == TokenType.COMMA:
+                raise ParserError(
+                    "Многомерные массивы не поддерживаются "
+                    "(синтаксис таб T a[1:n, 1:m] отклонён). "
+                    "Используйте одномерный таб или вложенную запись.",
+                    self.current_token(),
+                )
             self.eat(TokenType.RBRACKET)
+            if self.current_token().type == TokenType.LBRACKET:
+                raise ParserError(
+                    "Многомерные массивы не поддерживаются "
+                    "(синтаксис a[1:n][1:m] отклонён). "
+                    "Используйте одномерный таб или вложенную запись.",
+                    self.current_token(),
+                )
             declarations.append(ArrayDecl(Var(var_token), type_node, start_idx, end_idx))
         else:
             declarations.append(VarDecl(Var(var_token), type_node))

@@ -123,6 +123,23 @@ def build_set(*, name: str, value: Any = None, ok: bool = True, error: str = "")
     }
 
 
+def build_vars(
+    *,
+    globals_map: Dict[str, Any],
+    locals_map: Dict[str, Any],
+    arrays: Optional[Dict[str, Any]] = None,
+    records: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Reply to stdin ``vars`` — snapshot without leaving the pause."""
+    return {
+        "shay": "vars",
+        "globals": _jsonable(globals_map or {}),
+        "locals": _jsonable(locals_map or {}),
+        "arrays": _jsonable(arrays or {}),
+        "records": _jsonable(records or {}),
+    }
+
+
 def parse_command(raw: str) -> Optional[Dict[str, Any]]:
     text = (raw or "").strip()
     if not text.startswith("{"):

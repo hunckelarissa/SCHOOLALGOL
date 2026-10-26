@@ -46,7 +46,7 @@ from alg_warnings import (
     UnusedVarWarning,
     WarningCollector,
 )
-from constants import MAIN_PROGRAM_NAMES, main_program_label
+from constants import MAIN_PROGRAM_NAMES, is_main_program, main_program_label
 from errors import SemanticError
 from module_loader import (
     CyclicImportError,
@@ -56,6 +56,7 @@ from module_loader import (
 )
 from suggestions import format_suggestion_message
 from builtin_names import resolve_builtin
+from i18n import sem
 from types_model import (
     format_var_type,
     get_builtin_arity,
@@ -104,12 +105,37 @@ class SymbolTable:
         key = name.lower()
         if key in self.symbols:
             raise SemanticError(
-                f"Повторное объявление «{name}»",
+                sem("sem_redeclare", name=name),
                 token,
             )
         sym = Symbol(key, kind, type_name=type_name, token=token, node=node)
         self.symbols[key] = sym
         return sym
+
+    def define_or_update(
+        self,
+        name: str,
+        kind: str,
+        *,
+        type_name: Optional[str] = None,
+        token: Any = None,
+        node: Any = None,
+        allow_update: bool = False,
+    ) -> Symbol:
+        key = name.lower()
+        if key in self.symbols:
+            if not allow_update:
+                raise SemanticError(sem("sem_redeclare", name=name), token)
+            sym = self.symbols[key]
+            sym.kind = kind
+            if type_name is not None:
+                sym.type_name = type_name
+            if token is not None:
+                sym.token = token
+            if node is not None:
+                sym.node = node
+            return sym
+        return self.define(name, kind, type_name=type_name, token=token, node=node)
 
     def define_type(self, name: str, decl: RecordDecl | EnumDecl) -> None:
         key = name.lower()
@@ -153,6 +179,9 @@ class SemanticAnalyzer(NodeVisitor):
         main_filepath: str,
         verbose: bool = False,
         warnings: Optional[WarningCollector] = None,
+        *,
+        seed_locals: Optional[dict[str, str]] = None,
+        allow_redeclare: bool = False,
     ) -> None:
         self.tree = tree
         self.main_filepath = main_filepath
@@ -165,6 +194,9 @@ class SemanticAnalyzer(NodeVisitor):
         self._loop_depth = 0
         self._in_subroutine = False
         self._in_function = False  # True только внутри алг … рез (FuncDecl)
+        # REPL persist (C2): pre-known locals in main + allow повторное объявление
+        self.seed_locals = {k.lower(): v for k, v in (seed_locals or {}).items()}
+        self.allow_redeclare = allow_redeclare
 
     def _log(self, message: str) -> None:
         if self.verbose:
@@ -176,7 +208,7 @@ class SemanticAnalyzer(NodeVisitor):
     def _raise_undefined(self, name: str, token: Any) -> None:
         hint = format_suggestion_message(name, self.current_table.visible_names())
         err = SemanticError(
-            f"Переменная, константа или тип «{name}» не определена",
+            sem("sem_undefined", name=name),
             token,
             self._call_stack(),
         )
@@ -201,7 +233,7 @@ class SemanticAnalyzer(NodeVisitor):
             return name
         if self.current_table.lookup_type_def(name):
             return name
-        raise SemanticError(f"Неизвестный тип «{name}»", token, self._call_stack())
+        raise SemanticError(sem("sem_unknown_type", name=name), token, self._call_stack())
 
     def _process_declarations(self, declarations, base_path: str) -> None:
         for decl in declarations:
@@ -299,7 +331,7 @@ class SemanticAnalyzer(NodeVisitor):
                 main_sym = candidate
                 break
         if not main_sym:
-            raise SemanticError(f"Не найдена главная программа «алг {main_program_label()}»")
+            raise SemanticError(sem("sem_no_main", label=main_program_label()))
         for decl in node.declarations:
             if isinstance(decl, (ProcDecl, FuncDecl)):
                 self._analyze_subroutine(decl)
@@ -334,6 +366,10 @@ class SemanticAnalyzer(NodeVisitor):
                     type_name=type_name,
                     token=rv.var_node.token,
                 )
+            if is_main_program(decl.name) and self.seed_locals:
+                for name, tname in self.seed_locals.items():
+                    if not local_table.has(name):
+                        local_table.define(name, "var", type_name=tname)
             self._analyze_block(decl.block)
             self._emit_unused_locals(local_table)
             self._log(f"область «{frame_name}»: {len(local_table.symbols)} символ(ов)")
@@ -378,12 +414,13 @@ class SemanticAnalyzer(NodeVisitor):
 
     def visit_VarDecl(self, node: VarDecl) -> None:
         type_name = self._resolve_type(node.type_node, node.var_node.token)
-        self.current_table.define(
+        self.current_table.define_or_update(
             node.var_node.name,
             "var",
             type_name=type_name,
             token=node.var_node.token,
             node=node,
+            allow_update=self.allow_redeclare,
         )
 
     def visit_ArrayDecl(self, node: ArrayDecl) -> None:
@@ -397,12 +434,13 @@ class SemanticAnalyzer(NodeVisitor):
                 node.var_node.token,
                 self._call_stack(),
             )
-        self.current_table.define(
+        self.current_table.define_or_update(
             node.var_node.name,
             "var",
             type_name=type_name,
             token=node.var_node.token,
             node=node,
+            allow_update=self.allow_redeclare,
         )
 
     def _eval_const_expr(self, expr) -> Optional[float]:
@@ -464,28 +502,28 @@ class SemanticAnalyzer(NodeVisitor):
         elif isinstance(stmt, BreakNode):
             if self._loop_depth == 0:
                 raise SemanticError(
-                    "Оператор «выход / break» допустим только внутри цикла нц … кц",
+                    sem("sem_break_outside"),
                     stmt.token,
                     self._call_stack(),
                 )
         elif isinstance(stmt, ContinueNode):
             if self._loop_depth == 0:
                 raise SemanticError(
-                    "Оператор «продолжить / continue» допустим только внутри цикла нц … кц",
+                    sem("sem_continue_outside"),
                     stmt.token,
                     self._call_stack(),
                 )
         elif isinstance(stmt, ReturnNode):
             if not self._in_subroutine:
                 raise SemanticError(
-                    "Оператор «возврат / return» допустим только внутри процедуры или функции",
+                    sem("sem_return_outside"),
                     stmt.token,
                     self._call_stack(),
                 )
             if stmt.expr is not None:
                 if not self._in_function:
                     raise SemanticError(
-                        "«возврат выражение» допустим только в функции (алг … рез)",
+                        sem("sem_return_expr_proc"),
                         stmt.token,
                         self._call_stack(),
                     )
@@ -557,7 +595,7 @@ class SemanticAnalyzer(NodeVisitor):
                 return "вещ"
             if name in ("встроку", "подстрока", "вверх", "вниз"):
                 return "лит"
-            if name in ("корень", "модуль", "случ", "остаток", "степень", "мин", "макс", "sin", "cos"):
+            if name in ("корень", "модуль", "случ", "остаток", "степень", "мин", "макс", "син", "кос"):
                 return "вещ"
             if name == "конецфайла":
                 return "лог"
@@ -597,19 +635,19 @@ class SemanticAnalyzer(NodeVisitor):
             return
         if right == "лит" and left in ("цел", "вещ", "лог"):
             raise SemanticError(
-                f"Тип несовместим при :=: нельзя присвоить лит переменной типа «{left}»",
+                sem("sem_assign_lit", left=left),
                 token,
                 self._call_stack(),
             )
         if right == "лог" and left in ("цел", "вещ"):
             raise SemanticError(
-                f"Тип несовместим при :=: нельзя присвоить лог переменной типа «{left}»",
+                sem("sem_assign_log", left=left),
                 token,
                 self._call_stack(),
             )
         if left == "лог" and right in ("цел", "вещ", "лит"):
             raise SemanticError(
-                f"Тип несовместим при :=: нельзя присвоить «{right}» переменной типа лог",
+                sem("sem_assign_to_log", right=right),
                 token,
                 self._call_stack(),
             )
@@ -639,7 +677,7 @@ class SemanticAnalyzer(NodeVisitor):
         ):
             if left != right:
                 raise SemanticError(
-                    f"Тип несовместим при :=: «{right}» → «{left}»",
+                    sem("sem_assign_types", right=right, left=left),
                     token,
                     self._call_stack(),
                 )
@@ -655,7 +693,7 @@ class SemanticAnalyzer(NodeVisitor):
             self.check_expr(node.owner_expr)
         else:
             raise SemanticError(
-                "Нельзя присвоить значение этому выражению",
+                sem("sem_bad_lvalue"),
                 token,
                 self._call_stack(),
             )
@@ -705,7 +743,7 @@ class SemanticAnalyzer(NodeVisitor):
             canon = resolve_builtin(name)
             if not allow_void and canon in ("открыть", "закрыть"):
                 raise SemanticError(
-                    f"Процедура «{name}» не возвращает значение и не может использоваться в выражении",
+                    sem("sem_void_in_expr", name=name),
                     node.token,
                     self._call_stack(),
                 )
@@ -717,6 +755,14 @@ class SemanticAnalyzer(NodeVisitor):
                     node.token,
                     self._call_stack(),
                 )
+            if canon in ("длина",) and node.actual_params:
+                arg_t = self._infer_expr_type(node.actual_params[0])
+                if arg_t in ("цел", "вещ", "лог"):
+                    raise SemanticError(
+                        sem("sem_len_number"),
+                        node.token,
+                        self._call_stack(),
+                    )
             return
         sym = self.global_table.lookup(name)
         if not sym or sym.kind != "sub" or sym.node is None:
@@ -732,7 +778,7 @@ class SemanticAnalyzer(NodeVisitor):
         sub_decl = sym.node
         if not allow_void and isinstance(sub_decl, ProcDecl):
             raise SemanticError(
-                f"Процедура «{name}» не возвращает значение и не может использоваться в выражении",
+                sem("sem_void_in_expr", name=name),
                 node.token,
                 self._call_stack(),
             )
@@ -745,15 +791,31 @@ class SemanticAnalyzer(NodeVisitor):
                 self._call_stack(),
             )
 
+    def _is_file_symbol(self, var_node: Var) -> bool:
+        sym = self.current_table.lookup(var_node.name, mark_used=False)
+        if not sym:
+            return False
+        return sym.type_name == "файл" or canonical_type(sym.type_name or "") == "файл"
+
     def _check_print(self, node: Print) -> None:
+        # Parser treats «вывод ID, …» as file I/O; demote when ID is not файл
+        # so «вывод i, "*", j» stays multi-value console output.
         if node.file_node:
-            self._check_file_var(node.file_node)
+            if self._is_file_symbol(node.file_node):
+                self._check_file_var(node.file_node)
+            else:
+                node.items.insert(0, (node.file_node, None))
+                node.file_node = None
         for expr, _fmt in node.items:
             self.check_expr(expr)
 
     def _check_input(self, node: Input) -> None:
         if node.file_node:
-            self._check_file_var(node.file_node)
+            if self._is_file_symbol(node.file_node):
+                self._check_file_var(node.file_node)
+            else:
+                node.var_nodes.insert(0, node.file_node)
+                node.file_node = None
         for var_node in node.var_nodes:
             if not self.current_table.lookup(var_node.name, mark_used=True):
                 self._raise_undefined(var_node.name, var_node.token)
@@ -764,7 +826,7 @@ class SemanticAnalyzer(NodeVisitor):
             self._raise_undefined(var_node.name, var_node.token)
         if sym.type_name != "файл" and canonical_type(sym.type_name or "") != "файл":
             raise SemanticError(
-                f"Переменная «{var_node.name}» должна иметь тип файл",
+                sem("sem_need_file", name=var_node.name),
                 var_node.token,
                 self._call_stack(),
             )

@@ -1,12 +1,12 @@
 @echo off
 REM ALG / SCHOOLALGOL run wrapper (.alg)
-REM Usage: shaya-run.bat <program.alg> --run|--check|--debug [extra args...]
+REM Usage: shaya-run.bat <program.alg> --run|--check|--transpile [extra args...]
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "PROG=%~1"
 set "MODE=%~2"
 if "%PROG%"=="" (
-  echo Usage: shaya-run.bat ^<program.alg^> --run^|--check^|--debug [extra...]
+  echo Usage: shaya-run.bat ^<program.alg^> --run^|--check^|--transpile [extra...]
   exit /b 2
 )
 if "%MODE%"=="" set "MODE=--run"
@@ -55,17 +55,20 @@ pushd "%ENGINE_DIR%" >nul
 if /I "%MODE%"=="--check" (
   %PY% -u "%MAIN%" "%PROG%" --check !EXTRA!
   set "RC=!ERRORLEVEL!"
-) else if /I "%MODE%"=="--debug" (
-  echo NOTE: CLI Debug не поддерживается для SCHOOLALGOL; выполняется Run.
-  echo Используйте Step Debug в Eclipse ^(SHAYDBG^).
-  %PY% -u "%MAIN%" "%PROG%" !EXTRA!
+) else if /I "%MODE%"=="--transpile" (
+  %PY% -u "%MAIN%" "%PROG%" --transpile !EXTRA!
   set "RC=!ERRORLEVEL!"
 ) else if /I "%MODE%"=="--run" (
   %PY% -u "%MAIN%" "%PROG%" !EXTRA!
   set "RC=!ERRORLEVEL!"
+) else if /I "%MODE%"=="--debug" (
+  echo NOTE: CLI Debug removed. Use Eclipse Step Debug ^(SHAYDBG^).
+  echo Falling back to Run.
+  %PY% -u "%MAIN%" "%PROG%" !EXTRA!
+  set "RC=!ERRORLEVEL!"
 ) else (
   echo Неизвестный режим: %MODE%
-  echo Ожидается --run, --check или --debug
+  echo Ожидается --run, --check или --transpile
   set "RC=2"
 )
 popd >nul

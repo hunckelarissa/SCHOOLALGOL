@@ -10,6 +10,8 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.osgi.util.NLS;
+import org.myau.shaya.ide.i18n.Messages;
 
 /**
  * Parses interpreter stdout/stderr into Eclipse problem markers.
@@ -90,8 +92,7 @@ public final class ShayaMarkers {
 	}
 
 	private static String failMessage(String baseName, String output, int exitCode) {
-		return "Запуск завершился с ошибкой (код " + exitCode
-				+ "). Смотрите консоль ALG. Подсказка: ALG → Check или исправьте маркеры в Problems.";
+		return NLS.bind(Messages.Markers_failMessage, Integer.toString(exitCode));
 	}
 
 	/** Structured diagnostics only (path:line / строка N) — not loose “errorish” text. */
@@ -175,29 +176,29 @@ public final class ShayaMarkers {
 		if (n.endsWith(".alg")) {
 			if (m.contains("алг") || m.contains("ожида") || m.contains("syntax")
 					|| m.contains("синтакс") || m.contains("нач") || m.contains("кон")) {
-				return "проверьте пару алг / нач / кон (и если…все, нц…кц)";
+				return Messages.Markers_tip_algBlock;
 			}
 			if (m.contains("не объяв") || m.contains("undeclared") || m.contains("неизв")) {
-				return "объявите переменную (цел / вещ / лит / лог) перед использованием";
+				return Messages.Markers_tip_undeclared;
 			}
 			if (m.contains("тип") || m.contains("type")) {
-				return "проверьте совместимость типов при присваивании :=";
+				return Messages.Markers_tip_type;
 			}
 			if (m.contains("индекс") || m.contains("index") || m.contains("границ")) {
-				return "проверьте диапазон таб[ниж:верх] и индекс";
+				return Messages.Markers_tip_index;
 			}
 			if (m.contains("модул") || m.contains("использовать") || m.contains("import")) {
-				return "проверьте путь в использовать \"файл.alg\" рядом с программой";
+				return Messages.Markers_tip_module;
 			}
 		}
 		if (m.contains("python") && (m.contains("not found") || m.contains("не найден"))) {
-			return "установите Python 3 и добавьте в PATH (py -3 / python) или Preferences → ALG → Python";
+			return Messages.Markers_tip_python;
 		}
 		if (m.contains("toolchain") || m.contains("shaya-run") || m.contains("wrapper")) {
-			return "запустите .\\install_dropins.ps1 и проверьте Preferences → ALG → Validate…";
+			return Messages.Markers_tip_toolchain;
 		}
 		if (m.contains("unknown shaya extension") || m.contains("unknown alg extension")) {
-			return "поддерживается только .alg → SCHOOLALGOL";
+			return Messages.Markers_tip_extension;
 		}
 		return null;
 	}
@@ -215,7 +216,8 @@ public final class ShayaMarkers {
 		IMarker marker = file.createMarker(MARKER_TYPE);
 		String base = message == null || message.isBlank() ? "error" : message.trim();
 		String tip = tipFor(file.getName(), base);
-		marker.setAttribute(IMarker.MESSAGE, tip == null ? base : base + " — подсказка: " + tip);
+		marker.setAttribute(IMarker.MESSAGE,
+				tip == null ? base : NLS.bind(Messages.Markers_tipPrefix, base, tip));
 		marker.setAttribute(IMarker.SEVERITY, severity);
 		int safeLine = Math.max(1, line);
 		marker.setAttribute(IMarker.LINE_NUMBER, safeLine);

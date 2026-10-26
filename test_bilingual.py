@@ -295,6 +295,7 @@ end
         from ast_compare import ast_shapes_equal
 
         pairs = [
+            ("examples/08_control_flow.alg", "examples/en/08_control_flow.alg"),
             ("examples/09_records.alg", "examples/en/09_records.alg"),
         ]
         for ru_rel, en_rel in pairs:
@@ -318,6 +319,7 @@ class TestBilingualExamples(unittest.TestCase):
         path = os.path.join(_root, *parts)
         if not os.path.isfile(path):
             self.skipTest("/".join(parts) + " не найден")
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         return subprocess.run(
             [sys.executable, os.path.join(_root, "main.py"), path],
             cwd=os.path.dirname(path),
@@ -326,6 +328,7 @@ class TestBilingualExamples(unittest.TestCase):
             encoding="utf-8",
             errors="replace",
             timeout=15,
+            env=env,
         )
 
     def test_en_hello_runs_via_cli(self):
@@ -357,6 +360,79 @@ class TestBilingualExamples(unittest.TestCase):
         result = self._run_example("examples", "09_records.alg")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("3.5", result.stdout)
+
+    def test_en_control_flow_example(self):
+        result = self._run_example("examples", "en", "08_control_flow.alg")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("sum step2 =", result.stdout)
+        self.assertIn("-1", result.stdout)
+
+    def test_ru_control_flow_example(self):
+        result = self._run_example("examples", "08_control_flow.alg")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("sum step2 =", result.stdout)
+        self.assertIn("-1", result.stdout)
+
+
+class TestControlFlowKeywords(unittest.TestCase):
+    def test_token_pairs(self):
+        pairs = [
+            ("выход break BREAK", TokenType.ВЫХОД),
+            ("продолжить continue CONTINUE", TokenType.ПРОДОЛЖИТЬ),
+            ("возврат return RETURN", TokenType.ВОЗВРАТ),
+            ("шаг step STEP", TokenType.ШАГ),
+        ]
+        for source, expected in pairs:
+            types = [t.type for t in Lexer(source).generate_tokens() if t.type != TokenType.EOF]
+            self.assertEqual(types, [expected] * 3, source)
+
+    def test_en_continue_break_step_run(self):
+        out = _interp_stdout(
+            """
+proc mainprogram
+begin
+  int i
+  loop for i from 1 to 5 step 2
+    if i = 3 then
+      continue
+    endif
+    if i = 5 then
+      break
+    endif
+    output i
+  eloop
+end
+"""
+        )
+        self.assertEqual(out.split(), ["1"])
+
+    def test_ru_en_control_same_output(self):
+        ru = """
+алг основнаяпрограмма
+нач
+  цел i
+  нц для i от 1 до 4
+    если i = 2 то
+      продолжить
+    все
+    вывод i
+  кц
+кон
+"""
+        en = """
+proc mainprogram
+begin
+  int i
+  loop for i from 1 to 4
+    if i = 2 then
+      continue
+    endif
+    output i
+  eloop
+end
+"""
+        self.assertEqual(_interp_stdout(ru).split(), _interp_stdout(en).split())
+        self.assertEqual(_interp_stdout(ru).split(), ["1", "3", "4"])
 
 
 if __name__ == "__main__":

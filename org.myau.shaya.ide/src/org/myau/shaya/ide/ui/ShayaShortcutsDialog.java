@@ -11,42 +11,10 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Shell;
+import org.myau.shaya.ide.i18n.Messages;
 
 /** Scrollable keyboard shortcuts cheat sheet. */
 public class ShayaShortcutsDialog extends Dialog {
-
-	static final String TEXT = ""
-			+ "ALG / SCHOOLALGOL — горячие клавиши\n\n"
-			+ "Запуск\n"
-			+ "  Ctrl+Alt+R          Run (.alg)\n"
-			+ "  Ctrl+Alt+C          Check (lex + parse)\n"
-			+ "  Ctrl+Alt+L          Run Last\n"
-			+ "  Ctrl+Alt+Shift+D    Step Debug (SHAYDBG)\n"
-			+ "  Run As → ALG Application\n"
-			+ "  ALG → Recent → Open / Clear Recent\n"
-			+ "  ALG → Welcome…\n\n"
-			+ "Правка\n"
-			+ "  F3 / Ctrl+Click   Go to Declaration\n"
-			+ "  Ctrl+O            Quick Outline\n"
-			+ "  Ctrl+Shift+G      Find References\n"
-			+ "  Alt+Shift+R       Rename…\n"
-			+ "  Ctrl+Shift+F      Reindent\n"
-			+ "  Ctrl+/            Toggle Comment (|)\n"
-			+ "  Ctrl+Shift+P      Go to Matching Block\n"
-			+ "  Ctrl+Shift+E      Expand Selection to Block\n"
-			+ "  Ctrl+D            Duplicate Lines\n"
-			+ "  Alt+↑ / Alt+↓     Move Lines Up / Down\n"
-			+ "  Ctrl+Alt+J        Join Lines\n"
-			+ "  Alt+Shift+S       Sort Lines\n"
-			+ "  Ctrl+Space        Templates + keywords (RU/EN)\n"
-			+ "  Enter             Auto-indent after begin/if/loop / нач/если/нц…\n"
-			+ "  Console           клик file:line / строка N → исходник\n\n"
-			+ "Проект\n"
-			+ "  File → New → Project → ALG Project\n"
-			+ "  File → New → ALG → ALG Hello\n"
-			+ "  Window → Perspective → ALG\n"
-			+ "  Preferences → ALG (Toolchain home, Validate…)\n"
-			+ "  .alg → SCHOOLALGOL\n";
 
 	private Font mono;
 
@@ -58,7 +26,7 @@ public class ShayaShortcutsDialog extends Dialog {
 	@Override
 	protected void configureShell(Shell newShell) {
 		super.configureShell(newShell);
-		newShell.setText("ALG Shortcuts");
+		newShell.setText(Messages.Shortcuts_shellTitle);
 		newShell.setMinimumSize(480, 420);
 	}
 
@@ -72,7 +40,7 @@ public class ShayaShortcutsDialog extends Dialog {
 		gd.widthHint = 520;
 		gd.heightHint = 420;
 		text.setLayoutData(gd);
-		text.setText(TEXT);
+		text.setText(Messages.Shortcuts_body);
 		text.setEditable(false);
 		FontData[] fds = text.getFont().getFontData();
 		for (FontData fd : fds) {

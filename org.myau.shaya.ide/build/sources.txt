@@ -52,6 +52,7 @@ F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaSource
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaTemplates.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaTextHover.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\editor\ShayaToggleCommentHandler.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\i18n\Messages.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\launch\ShayaLaunchConstants.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\launch\ShayaLaunchDelegate.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\launch\ShayaLaunchShortcut.java
@@ -68,7 +69,6 @@ F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\prefs\ShayaPrefere
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaCheckHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaConsole.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaConsoleHyperlinkMatcher.java
-F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaDebugHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaImportTrackHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaLastLaunch.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaLauncher.java
@@ -81,6 +81,7 @@ F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaRunLastHa
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaSourceResolver.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaStepDebugHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaToggleNatureHandler.java
+F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\run\ShayaTranspileHandler.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\toolchain\ShayaDocs.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\toolchain\ShayaToolchain.java
 F:\proj\SCHOOLALGOL\org.myau.shaya.ide\src\org\myau\shaya\ide\ui\ShayaAboutDialog.java

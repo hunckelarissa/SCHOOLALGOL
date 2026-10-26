@@ -1,139 +1,144 @@
-# ALG IDE — установка плагина Eclipse
+# ALG IDE — Eclipse plug-in setup
 
-Операционная инструкция. Обзор возможностей плагина и языка — в **[README.md](README.md)**; грамматика — в **[GRAMMAR.md](GRAMMAR.md)**; протокол Step Debug — в **[docs/SHAYDBG.md](docs/SHAYDBG.md)**.
+Operational guide. Overview: **[README.md](README.md)** (EN) / **[README.ru.md](README.ru.md)** (RU); grammar: **[GRAMMAR.md](GRAMMAR.md)** / **[GRAMMAR.ru.md](GRAMMAR.ru.md)**; Step Debug: **[docs/SHAYDBG.md](docs/SHAYDBG.md)**; roadmap: **[TODO.md](TODO.md)**.  
+**Russian setup guide:** [IDE_SETUP.ru.md](IDE_SETUP.ru.md).
 
 | | |
 |--|--|
-| Плагин | `org.myau.shaya.ide` **0.6.7** (`META-INF/MANIFEST.MF`) |
-| Исходники | `F:\proj\SCHOOLALGOL\org.myau.shaya.ide` |
-| Движок | SCHOOLALGOL **1.2.1** — только `.alg` → `main.py` (RU + EN) |
-| Бренд UI | **ALG** (меню, перспектива, Preferences). Java-пакет `org.myau.shaya.ide` не переименовывался |
+| Plug-in | `org.myau.shaya.ide` **0.6.11** (`META-INF/MANIFEST.MF`) |
+| Sources | `org.myau.shaya.ide/` in the repo |
+| Engine | SCHOOLALGOL **1.2.1** — `.alg` → `main.py` (RU + EN) |
+| UI brand | **ALG** (menu, perspective, Preferences). Java package `org.myau.shaya.ide` unchanged |
 
 ---
 
-## Состав toolchain в dropins
+## Toolchain layout in dropins
 
-Типичный путь (подставьте свой Eclipse):
+Typical path (adjust for your Eclipse):
 
 ```
 …\eclipse\dropins\
-  org.myau.shaya.ide_0.6.7.jar
+  org.myau.shaya.ide_0.6.11.jar
   schoolalgol-shaya\
     tools\shaya-run.bat
     interpreters\SchoolAlgol\main.py   (+ lexer.py, parser.py, …)
-    examples\                          (опционально: install_dropins.ps1 -Examples)
-    docs\GRAMMAR.md                    (копируется из репозитория)
+    examples\                          (optional: install_dropins.ps1 -Examples)
+    docs\GRAMMAR.md                    (EN; synced from repo)
+    docs\GRAMMAR.ru.md                 (RU; synced if present)
 ```
 
-Плагин ищет `schoolalgol-shaya` автоматически. При сбое:
+The plug-in auto-discovers `schoolalgol-shaya`. If not:
 
 **Window → Preferences → ALG → Toolchain home**  
-= полный путь к каталогу `schoolalgol-shaya`
+= full path to the `schoolalgol-shaya` folder
 
-Кнопка **Validate…** должна показать OK для home, bat, `SchoolAlgol/main.py` и Python.
+**Validate…** should report OK for home, bat, `SchoolAlgol/main.py`, and Python.
 
-Другие поля Preferences → ALG:
+Other Preferences → ALG fields:
 
-| Поле | Смысл |
-|------|--------|
-| Extra args | Доп. аргументы в `shaya-run.bat` / запуске |
-| Python | Путь к `python.exe`; пусто = PATH / `py -3` |
-| Indent width | 2 или 4 |
-| Insert spaces for tabs | пробелы вместо таба |
-| Check on save | проверка `.alg` при сохранении |
-
----
-
-## Установка JAR (обычный Eclipse)
-
-Собранный бандл:
-
-`…\eclipse\dropins\org.myau.shaya.ide_0.6.7.jar`
-
-После копирования/обновления JAR **обязательно перезапустите Eclipse** (иначе OSGi может не подхватить бандл).
-
-- **dropins JAR** — повседневный запуск без PDE.
-- **PDE «Run As → Eclipse Application»** — разработка из исходников в runtime workbench.
-
-Удаляйте старые `org.myau.shaya.ide_0.6.1.jar` … `0.6.6.jar`, оставляя только **0.6.7**.
-
-JAR с другим Bundle-SymbolicName (`org.shaya.ide_*.jar`) не конфликтует с `org.myau.shaya.ide` — можно оставить.
+| Field | Meaning |
+|-------|---------|
+| Extra args | Extra args for `shaya-run.bat` / launch |
+| Python | Path to `python.exe`; empty = PATH / `py -3` |
+| Indent width | 2 or 4 |
+| Insert spaces for tabs | spaces instead of tab |
+| Check on save | validate `.alg` on save |
 
 ---
 
-## Синхронизация toolchain: `install_dropins.ps1`
+## Installing the JAR (normal Eclipse)
 
-После правок `*.py` / `tools/shaya-run.bat` в `F:\proj\SCHOOLALGOL`:
+Built bundle:
+
+`…\eclipse\dropins\org.myau.shaya.ide_0.6.11.jar`
+
+After copying/updating the JAR **restart Eclipse** (otherwise OSGi may keep the old bundle).
+
+- **dropins JAR** — daily use without PDE.
+- **PDE "Run As → Eclipse Application"** — develop from sources in a runtime workbench.
+
+Remove old `org.myau.shaya.ide_0.6.1.jar` … `0.6.8.jar`, keep only **0.6.11**. If a file is locked, **close Eclipse** and delete it manually. `install_dropins.ps1` warns if several `org.myau.shaya.ide_*.jar` remain in dropins. UI strings follow the workbench locale (EN default + `messages_ru.properties` / `plugin_ru.properties`).
+
+A JAR with another Bundle-SymbolicName (`org.shaya.ide_*.jar`) does not conflict with `org.myau.shaya.ide`.
+
+---
+
+## Syncing the toolchain: `install_dropins.ps1`
+
+After changing `*.py` / `tools/shaya-run.bat` in the repo:
 
 ```powershell
 cd F:\proj\SCHOOLALGOL
 .\install_dropins.ps1
 ```
 
-Скрипт:
+The script:
 
-- ищет `dropins` (параметр `-EclipseDropins` или типичные пути под `%USERPROFILE%\eclipse`);
-- копирует `*.py` → `schoolalgol-shaya\interpreters\SchoolAlgol\`;
-- копирует `tools\shaya-run.bat` → `schoolalgol-shaya\tools\` (нужен для Run/Check);
-- копирует `GRAMMAR.md` → `schoolalgol-shaya\docs\` (меню «Грамматика…»);
-- **не** обещает копировать несуществующие docs.
+- finds `dropins` (`-EclipseDropins` or common paths under `%USERPROFILE%\eclipse`);
+- copies `*.py` → `schoolalgol-shaya\interpreters\SchoolAlgol\`;
+- copies `tools\shaya-run.bat` → `schoolalgol-shaya\tools\`;
+- copies `GRAMMAR.md` and `GRAMMAR.ru.md` (if present) → `schoolalgol-shaya\docs\`.
 
-Опции:
+Options:
 
 ```powershell
-.\install_dropins.ps1 -PluginJar          # JAR плагина 0.6.7 + удаление старых 0.6.1–0.6.6
-.\install_dropins.ps1 -Examples           # examples/ включая track/
+.\install_dropins.ps1 -PluginJar          # plug-in JAR 0.6.11 + remove older 0.6.1–0.6.8
+.\install_dropins.ps1 -Examples           # examples/ including track/
 .\install_dropins.ps1 -EclipseDropins "D:\path\to\eclipse\dropins"
 ```
 
-При обновлении только JAR toolchain Python не трогайте (или снова запустите скрипт без `-PluginJar` только для `.py`/bat). Не кладите в toolchain архив `org.myau.shaya.ide.zip`.
+When updating only the JAR, you can skip re-syncing Python (or run without `-PluginJar` for `.py`/bat only). Do not put `org.myau.shaya.ide.zip` into the toolchain.
 
-Первый запуск: диалог **Welcome** (можно снова включить в Preferences → ALG). Отладка — только **Step Debug** (CLI Debug скрыт).
+First run: **Welcome** dialog (re-enable in Preferences → ALG). Debugging is **Step Debug** only.
+
 ---
 
-## Импорт в PDE (разработка)
+## PDE import (development)
 
-1. Eclipse IDE for Java с PDE (например `java-2022-12`).
-2. **File → Import → Existing Projects into Workspace** → `F:\proj\SCHOOLALGOL\org.myau.shaya.ide`.
+1. Eclipse IDE for Java with PDE (e.g. `java-2022-12`).
+2. **File → Import → Existing Projects into Workspace** → `org.myau.shaya.ide`.
 3. Target Platform: Eclipse SDK / RCP.
-4. ПКМ по проекту → **Run As → Eclipse Application** (или Debug As).
-5. В новом workbench: **Window → Perspective → Open Perspective → ALG**.
+4. Right-click project → **Run As → Eclipse Application** (or Debug As).
+5. In the new workbench: **Window → Perspective → Open Perspective → ALG**.
 
 ---
 
-## Запуск программ .alg
+## Running `.alg` programs
 
-1. **File → New → Project → ALG Project** (создаст Hello RU + EN) или открыть свой `.alg`.
+1. **File → New → Project → ALG Project** (Hello RU + EN) or open your `.alg`.
 2. **ALG → Run** — Ctrl+Alt+R.
 3. **ALG → Check** — Ctrl+Alt+C (`main.py --check`).
-4. **ALG → Run Last** — Ctrl+Alt+L.
-5. Breakpoint (двойной клик по линейке) → **ALG → Step Debug** — Ctrl+Alt+Shift+D (`main.py --debug-protocol`, SHAYDBG).
+4. **ALG → Transpile** — Ctrl+Alt+T (`main.py --transpile`; opens sibling `.c` in the editor when possible).
+5. **ALG → Run Last** — Ctrl+Alt+L.
+6. Breakpoint (double-click ruler) → **ALG → Step Debug** — Ctrl+Alt+Shift+D (`main.py --debug-protocol`, SHAYDBG).
 
-Подсветка, Ctrl+Space и автодополнение знают EN-синонимы (`proc`, `begin`, `int`, …) наряду с русскими, а также управление потоком: `выход`/`break`, `продолжить`/`continue`, `возврат`/`return`, `шаг`/`step` и встроенные (`остаток`, `размер`, …). Комментарии строк — `|`.
+Highlighting and Ctrl+Space know EN synonyms (`proc`, `begin`, `int`, …) plus flow keywords (`break`/`continue`/`return`/`step`) and builtins. Line comments use `|`.
 
-Консоль: вывод интерпретатора; гиперссылки на `файл:строка` / «(строка N)».
+Console: interpreter output; hyperlinks to `file:line` / "(line N)".
 
-### Полезные команды редактора
+### Useful editor commands
 
-| Действие | Обычно |
-|----------|--------|
+| Action | Typical binding |
+|--------|-----------------|
 | Toggle Comment | Ctrl+/ |
 | Go to Matching Block | Ctrl+Shift+P |
 | Quick Outline | Ctrl+O |
 | Go to Declaration | F3 |
 | Find References | Ctrl+Shift+G |
+| Rename… | Alt+Shift+R |
 | Reindent | Ctrl+Shift+F |
 
-Точный список: **ALG → Keyboard Shortcuts…** / About.
+**Rename / Find References limits:** whole-word identifiers only; **keywords and builtins are refused**; text inside `|` comments and `"…"` / `'…'` strings is skipped. Not a full semantic rename (no scope analysis). Exact list: **ALG → Keyboard Shortcuts…** / About.
 
 ---
 
-## Связь с CLI движка
+## Relation to the engine CLI
 
-Плагин вызывает тот же `main.py`, что и командная строка:
+The plug-in calls the same `main.py` as the command line:
 
-- Run → интерпретация;
+- Run → interpret;
 - Check → `--check`;
-- Step Debug → `--debug-protocol` (+ breakpoints как `--break`); wire-протокол — **[docs/SHAYDBG.md](docs/SHAYDBG.md)**.
+- Transpile → `--transpile` (writes `program.c` next to the `.alg`);
+- Step Debug → `--debug-protocol` (+ breakpoints as `--break`); wire protocol — **[docs/SHAYDBG.md](docs/SHAYDBG.md)**.
 
-Дополнительно с хоста: `--verbose`, `--trace`, `--repl --lang en` — см. README. Отдельный пункт меню «CLI Debug» для SCHOOLALGOL не используется (сообщение отсылает к Run / Check / Step Debug).
+From a host shell: `--verbose`, `--trace`, `--repl --lang en` — see README. Legacy **CLI Debug** was removed from the plug-in (use **Step Debug**).
